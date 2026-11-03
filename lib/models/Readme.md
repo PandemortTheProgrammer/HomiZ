@@ -1,0 +1,1 @@
+En esta carpeta van los modelos con los que establecer tipado estricto en las pantallas
