@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../services/providers/pending_visit_provider.dart';
 import '../services/providers/session_provider.dart';
+import 'auth/login_page.dart';
 import '../services/providers/site_link_provider.dart';
 import 'auth/splash_page.dart';
 import '../widgets/common/homiz_bottom_nav.dart';
@@ -79,7 +80,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
-      GoRoute(path: '/login', builder: (_, _) => const ProximamentePage(titulo: 'Inicio de sesión')),
+      GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/register', builder: (_, _) => const ProximamentePage(titulo: 'Registro')),
       GoRoute(path: '/reset', builder: (_, _) => const ProximamentePage(titulo: 'Recuperar contraseña')),
       // Entró con la contraseña temporal del correo: crea la suya antes de seguir
