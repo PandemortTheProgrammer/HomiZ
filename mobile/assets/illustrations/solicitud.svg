@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <!-- Ilustración: casa con lupa (busco casa / mis solicitudes) -->
+  <rect x="16" y="22" width="80" height="78" rx="10" fill="#FFFFFF" fill-opacity="0.95"/>
+  <path d="M30 84V60l26-20 26 20v24z" fill="#DBEBFF"/>
+  <path d="M26 62l30-24 30 24" stroke="#037DFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="49" y="66" width="14" height="18" rx="2" fill="#285193"/>
+  <circle cx="88" cy="84" r="15" fill="#FEDC01"/>
+  <circle cx="86" cy="82" r="6" stroke="#131214" stroke-width="3"/>
+  <path d="M90.5 86.5l5 5" stroke="#131214" stroke-width="3" stroke-linecap="round"/>
+</svg>
