@@ -1,1 +1,0 @@
-Aquí solo van pantallas completas
