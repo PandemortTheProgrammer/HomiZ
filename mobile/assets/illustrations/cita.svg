@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <!-- Ilustración de marcador: calendario con casa -->
+  <rect x="18" y="24" width="84" height="76" rx="10" fill="#FFFFFF" fill-opacity="0.95"/>
+  <rect x="18" y="24" width="84" height="20" rx="10" fill="#285193"/>
+  <rect x="34" y="16" width="6" height="16" rx="3" fill="#DBEBFF"/>
+  <rect x="80" y="16" width="6" height="16" rx="3" fill="#DBEBFF"/>
+  <path d="M42 80V64l18-14 18 14v16z" fill="#DBEBFF"/>
+  <path d="M38 66l22-18 22 18" stroke="#037DFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="55" y="68" width="10" height="12" rx="2" fill="#037DFF"/>
+  <circle cx="92" cy="92" r="14" fill="#FEDC01"/>
+  <path d="M92 85v8l5 3" stroke="#131214" stroke-width="3" stroke-linecap="round"/>
+</svg>
