@@ -4,10 +4,15 @@ import 'package:go_router/go_router.dart';
 
 import '../services/providers/pending_visit_provider.dart';
 import '../services/providers/session_provider.dart';
+import 'auth/create_password_page.dart';
 import 'auth/login_page.dart';
 import '../services/providers/site_link_provider.dart';
 import 'auth/register_page.dart';
+import 'auth/reset_password_page.dart';
 import 'auth/splash_page.dart';
+import 'home/home_page.dart';
+import 'notifications/notifications_page.dart';
+import 'profile/profile_page.dart';
 import '../widgets/common/homiz_bottom_nav.dart';
 import 'proximamente_page.dart';
 
@@ -83,11 +88,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
-      GoRoute(path: '/reset', builder: (_, _) => const ProximamentePage(titulo: 'Recuperar contraseña')),
+      GoRoute(path: '/reset', builder: (_, _) => const ResetPasswordPage()),
       // Entró con la contraseña temporal del correo: crea la suya antes de seguir
-      GoRoute(path: _createPassword, builder: (_, _) => const ProximamentePage(titulo: 'Crear contraseña')),
-      GoRoute(path: '/profile', builder: (_, _) => const ProximamentePage(titulo: 'Perfil')),
-      GoRoute(path: '/notifications', builder: (_, _) => const ProximamentePage(titulo: 'Notificaciones')),
+      GoRoute(path: _createPassword, builder: (_, _) => const CreatePasswordPage()),
+      GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
+      GoRoute(path: '/notifications', builder: (_, _) => const NotificationsPage()),
       // Avisos de pagos, contratos o mantenimiento: esas pantallas no están en esta versión
       GoRoute(
         path: '/property',
@@ -103,7 +108,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [
             GoRoute(
               path: '/home',
-              builder: (_, _) => const ProximamentePage(titulo: 'Inicio'),
+              builder: (_, _) => const HomePage(),
               routes: [
                 // Solicitudes: cliente «Mis solicitudes» y «Busco casa»; personal, las del sitio y la app.
                 GoRoute(path: 'requests', builder: (_, _) => const ProximamentePage(titulo: 'Mis solicitudes')),
