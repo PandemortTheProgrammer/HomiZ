@@ -13,6 +13,10 @@ import 'auth/splash_page.dart';
 import 'home/home_page.dart';
 import 'notifications/notifications_page.dart';
 import 'profile/profile_page.dart';
+import 'requests/new_request_page.dart';
+import 'requests/request_detail_page.dart';
+import 'requests/requests_page.dart';
+import '../services/providers/requests_provider.dart';
 import '../widgets/common/homiz_bottom_nav.dart';
 import 'proximamente_page.dart';
 
@@ -111,12 +115,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (_, _) => const HomePage(),
               routes: [
                 // Solicitudes: cliente «Mis solicitudes» y «Busco casa»; personal, las del sitio y la app.
-                GoRoute(path: 'requests', builder: (_, _) => const ProximamentePage(titulo: 'Mis solicitudes')),
+                GoRoute(path: 'requests', builder: (_, _) => const RequestsPage()),
                 GoRoute(
                   path: 'requests/new',
-                  builder: (_, state) => const ProximamentePage(titulo: 'Nueva solicitud'),
+                  builder: (_, state) => NewRequestPage(slug: state.uri.queryParameters['casa'], welcome: state.uri.queryParameters['bienvenida'] == '1'),
                 ),
-                GoRoute(path: 'requests/:id', builder: (_, state) => const ProximamentePage(titulo: 'Detalle de solicitud')),
+                GoRoute(path: 'requests/:id', builder: (_, state) => RequestDetailPage(requestId: state.pathParameters['id']!)),
               ],
             ),
           ]),
@@ -138,9 +142,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [
             GoRoute(
               path: '/requests',
-              builder: (_, _) => const ProximamentePage(titulo: 'Mis solicitudes'),
+              builder: (_, _) => const RequestsPage(),
               routes: [
-                GoRoute(path: ':id', builder: (_, state) => const ProximamentePage(titulo: 'Detalle de solicitud')),
+                GoRoute(path: ':id', builder: (_, state) => RequestDetailPage(requestId: state.pathParameters['id']!)),
               ],
             ),
           ]),
@@ -162,7 +166,7 @@ class _TabsShell extends ConsumerWidget {
     final user = ref.watch(sessionProvider).value;
     // Solicitudes como pestaña propia para quien las atiende (brokers y administración)
     final showRequests = user != null && user.isStaff && user.can('leads.manage');
-    const newRequests = 0; // las solicitudes llegan en la Fase 6
+    final newRequests = showRequests ? ref.watch(requestsProvider('nuevo')).value?.length ?? 0 : 0;
     return Scaffold(
       body: shell,
       bottomNavigationBar: HomizBottomNav(
