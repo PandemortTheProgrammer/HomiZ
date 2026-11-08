@@ -21,6 +21,7 @@ import 'requests/new_request_page.dart';
 import 'requests/request_detail_page.dart';
 import 'requests/requests_page.dart';
 import '../services/providers/requests_provider.dart';
+import '../services/live/live_updates.dart';
 import '../widgets/common/homiz_bottom_nav.dart';
 
 const _authRoutes = {'/login', '/register', '/reset'};
@@ -168,6 +169,8 @@ class _TabsShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Tiempo real mientras se usa la app (avisos, citas y solicitudes se actualizan solos)
+    ref.watch(liveUpdatesProvider);
     final user = ref.watch(sessionProvider).value;
     // Solicitudes como pestaña propia para quien las atiende (brokers y administración)
     final showRequests = user != null && user.isStaff && user.can('leads.manage');
