@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'appointments/appointment_detail_page.dart';
+import 'appointments/appointments_page.dart';
+import 'appointments/catalog_page.dart';
 import '../services/providers/pending_visit_provider.dart';
+import 'appointments/request_visit_page.dart';
 import '../services/providers/session_provider.dart';
 import 'auth/create_password_page.dart';
 import 'auth/login_page.dart';
@@ -18,10 +22,11 @@ import 'requests/request_detail_page.dart';
 import 'requests/requests_page.dart';
 import '../services/providers/requests_provider.dart';
 import '../widgets/common/homiz_bottom_nav.dart';
-import 'proximamente_page.dart';
 
 const _authRoutes = {'/login', '/register', '/reset'};
 const _createPassword = '/create-password';
+
+int? _intParam(GoRouterState state, String name) => int.tryParse(state.uri.queryParameters[name] ?? '');
 
 /// Decide a dónde ir según la sesión. Pura para poder probarla sin widgets.
 /// [pendingVisit]: casa elegida en el sitio; sin sesión se pide crear cuenta y al entrar se abre su visita.
@@ -127,14 +132,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [
             GoRoute(
               path: '/appointments',
-              builder: (_, state) => const ProximamentePage(titulo: 'Mis citas'),
+              builder: (_, state) => AppointmentsPage(initialFilter: _intParam(state, 'filter')),
               routes: [
                 // «catalog» va antes que «:id» para que no se tome como id de cita.
-                GoRoute(path: 'catalog', builder: (_, _) => const ProximamentePage(titulo: 'Catálogo')),
-                GoRoute(path: 'catalog/:propertyId', builder: (_, state) => const ProximamentePage(titulo: 'Solicitar visita')),
+                GoRoute(path: 'catalog', builder: (_, _) => const CatalogPage()),
+                GoRoute(path: 'catalog/:propertyId', builder: (_, state) => RequestVisitPage(propertyId: state.pathParameters['propertyId']!)),
                 // Casa elegida en el sitio de Zugar (por su slug).
-                GoRoute(path: 'visit/:slug', builder: (_, state) => const ProximamentePage(titulo: 'Solicitar visita')),
-                GoRoute(path: ':id', builder: (_, state) => const ProximamentePage(titulo: 'Detalle de cita')),
+                GoRoute(path: 'visit/:slug', builder: (_, state) => VisitFromSitePage(slug: state.pathParameters['slug']!)),
+                GoRoute(path: ':id', builder: (_, state) => AppointmentDetailPage(appointmentId: state.pathParameters['id']!)),
               ],
             ),
           ]),
