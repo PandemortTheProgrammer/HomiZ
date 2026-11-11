@@ -13,7 +13,7 @@ import '../../models/client_dashboard.dart';
 import '../../services/providers/dashboard_provider.dart';
 import '../../widgets/home/staff_home.dart';
 
-/// Pantalla 4 · Inicio: próxima cita y solicitudes.
+/// Pantalla 4 · Inicio del cliente: próxima cita y sus solicitudes (sin pagos, reportes ni compras).
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
@@ -51,7 +51,7 @@ class _ClientHome extends ConsumerWidget {
   }
 }
 
-/// Las tarjetas azules del inicio (separadas para probarlas sin red).
+/// Las dos tarjetas azules del inicio del cliente (separadas para probarlas sin red).
 class DashboardCards extends StatelessWidget {
   const DashboardCards({super.key, required this.dashboard});
 

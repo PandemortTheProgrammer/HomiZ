@@ -28,6 +28,23 @@ class RequestDetailPage extends ConsumerWidget {
 
   final String requestId;
 
+  /// Cita que pidió la persona y espera que el personal la acepte.
+  static RequestAppointment? _askedVisit(LeadRequest r) =>
+      r.appointments.where((a) => a.status == 'por-confirmar' && a.awaiting == 'staff' && a.scheduledAt.isAfter(Fmt.now())).firstOrNull;
+
+  /// Fecha y hora que pidió en su solicitud, si aún no hay cita y la casa sigue disponible.
+  static DateTime? _askedDate(LeadRequest r) {
+    final day = r.preferredDate, time = r.preferredTime;
+    if (r.propertyId == null || day == null || time == null || time.length < 5 || r.appointments.any((a) => a.isActive)) return null;
+    final at = DateTime.tryParse('${day.substring(0, 10)}T${time.substring(0, 5)}:00');
+    if (at == null || !at.isAfter(Fmt.now())) return null;
+    final minutes = at.hour * 60 + at.minute;
+    return minutes >= 7 * 60 && minutes <= 22 * 60 + 45 ? at : null; // horario de visitas
+  }
+
+  /// Con la prioridad de otro broker se puede leer, pero no atender. La dueña siempre puede.
+  static bool _readOnly(LeadRequest r, {required bool owner, required String? me}) => r.priorityBrokerId != null && r.priorityBrokerId != me && !owner;
+
   Future<void> _run(BuildContext context, Future<void> Function() action, String done) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -42,13 +59,17 @@ class RequestDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final staff = ref.watch(sessionProvider.select((s) => s.value?.isStaff ?? false));
     final admin = ref.watch(sessionProvider.select((s) => s.value?.isAdmin ?? false));
+    final broker = ref.watch(sessionProvider.select((s) => s.value?.isBroker ?? false));
+    final owner = ref.watch(sessionProvider.select((s) => s.value?.isOwner ?? false));
+    final me = ref.watch(sessionProvider.select((s) => s.value?.id));
     final request = ref.watch(requestProvider(requestId));
     final actions = ref.read(requestActionsProvider);
+    final locked = request.value != null && _readOnly(request.value!, owner: owner, me: me);
     return Scaffold(
       appBar: AppBar(
         title: Text(request.value == null ? 'Solicitud' : 'Solicitud ${request.value!.folio}'),
         actions: [
-          if (staff && admin && request.value != null)
+          if (staff && admin && request.value != null && !locked)
             IconButton(
               tooltip: 'Eliminar solicitud',
               icon: const Icon(Icons.delete_outline_rounded),
@@ -83,10 +104,23 @@ class RequestDetailPage extends ConsumerWidget {
                 ),
                 if (staff) ...[
                   const SizedBox(height: AppSpacing.md),
-                  _BrokerCard(request: value, admin: admin, onAssign: (id, name) => _run(context, () => actions.assign(value.id, id), 'Solicitud asignada a $name. Le avisamos y su cita se va con $name.')),
+                  if (value.priorityLabel case final label?) ...[
+                    InfoNotice(text: locked ? '${label.endsWith('.') ? label : '$label.'} Puedes verla, pero aún no atenderla.' : label),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  _BrokerCard(request: value, admin: admin, broker: broker, readOnly: locked, onTake: () => _run(context, () => actions.take(value.id), 'Tomaste esta solicitud. Ahora su seguimiento es tuyo.'), onAssign: (id, name) => _run(context, () => actions.assign(value.id, id), 'Solicitud asignada a $name. Le avisamos y su cita se va con $name.')),
                 ],
                 const SizedBox(height: AppSpacing.md),
                 RequestFormSections(request: value, staff: staff),
+                // El cliente corrige lo que mandó mientras la solicitud siga abierta
+                if (!staff && value.status != 'cerrado') ...[
+                  const SizedBox(height: AppSpacing.md),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/home/requests/new', extra: value),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Editar mi información'),
+                  ),
+                ],
                 if (staff && value.others.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.lg),
                   Text('Otras solicitudes de esta persona · ${value.others.length}', style: AppTextStyles.cardTitle),
@@ -117,7 +151,31 @@ class RequestDetailPage extends ConsumerWidget {
                     ),
                     const SizedBox(height: AppSpacing.md),
                   ],
-                  PrimaryButton(
+                  if (locked)
+                    const SizedBox.shrink()
+                  else if (_askedVisit(value) case final a?) ...[
+                    Text('Pidió ${Fmt.appointment(a.scheduledAt)}. Si estás de acuerdo con la fecha y la hora, haz la cita.', style: AppTextStyles.body),
+                    const SizedBox(height: AppSpacing.sm),
+                    PrimaryButton(
+                      label: 'Hacer cita',
+                      icon: Icons.check_rounded,
+                      onPressed: () => _run(context, () async {
+                        await ref.read(appointmentActionsProvider).confirm(a.id);
+                        ref.invalidate(requestProvider(requestId));
+                      }, 'Cita ${a.code} confirmada. Le avisamos al cliente.'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ] else if (_askedDate(value) case final at?) ...[
+                    Text('Pidió ${Fmt.appointment(at)}. Si estás de acuerdo con la fecha y la hora, haz la cita.', style: AppTextStyles.body),
+                    const SizedBox(height: AppSpacing.sm),
+                    PrimaryButton(
+                      label: 'Hacer cita',
+                      icon: Icons.check_rounded,
+                      onPressed: () => _run(context, () => actions.schedule(value.id, propertyId: value.propertyId!, at: at, agreed: true), 'Cita confirmada. Le avisamos al cliente.'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  if (!locked) PrimaryButton(
                     label: value.appointments.any((a) => a.isActive) ? 'Cambiar fecha de la cita' : 'Agendar cita',
                     icon: Icons.event_available_outlined,
                     onPressed: () async {
@@ -135,7 +193,7 @@ class RequestDetailPage extends ConsumerWidget {
                   InfoNotice(text: '${value.response!}${value.respondedBy != null ? '\n— ${value.respondedBy}' : ''}'),
                   const SizedBox(height: AppSpacing.sm),
                 ],
-                RequestChat(requestId: value.id, staff: staff),
+                RequestChat(requestId: value.id, staff: staff, readOnly: locked),
                 const SizedBox(height: AppSpacing.lg),
                 Text(staff ? 'Casas propuestas' : 'Casas que te proponemos', style: AppTextStyles.cardTitle),
                 const SizedBox(height: AppSpacing.sm),
@@ -146,7 +204,9 @@ class RequestDetailPage extends ConsumerWidget {
                     title: p.name,
                     caption: '${Fmt.money(p.price)}${p.operation == 'renta' ? ' / mes' : ''}',
                     subtitle: ['${p.zone}${p.city != null ? ', ${p.city!.split(',').first}' : ''}', '${p.rec} rec. · ${p.banos % 1 == 0 ? p.banos.toInt() : p.banos} baños', if (p.note != null) '«${p.note}»'].join('\n'),
-                    trailing: staff
+                    trailing: locked
+                        ? null
+                        : staff
                         ? IconButton(
                             tooltip: 'Quitar ${p.name}',
                             icon: const Icon(Icons.close_rounded, color: AppColors.danger),
@@ -161,7 +221,9 @@ class RequestDetailPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.md),
                 ],
-                if (staff) ...[
+                if (locked)
+                  const SizedBox.shrink()
+                else if (staff) ...[
                   PrimaryButton(
                     label: 'Proponer una casa',
                     icon: Icons.add_home_outlined,
@@ -204,7 +266,7 @@ class RequestDetailPage extends ConsumerWidget {
   /// Personal: elige una casa publicada del inventario y una nota opcional.
   Future<void> _pickHouse(BuildContext context, WidgetRef ref, LeadRequest r) async {
     final taken = r.proposals.map((p) => p.propertyId).toSet();
-    final houses = (await ref.read(inventoryProvider('').future))
+    final houses = (await ref.read(allHousesProvider.future))
         .where((h) => h.visibility == 'publicada' && (h.status == 'disponible' || h.status == 'reservada') && !taken.contains(h.id))
         .toList();
     if (!context.mounted) return;
@@ -241,10 +303,13 @@ class RequestDetailPage extends ConsumerWidget {
 
 /// Conversación de la solicitud: el cliente y su asesor se escriben aquí (en lugar del correo).
 class RequestChat extends ConsumerStatefulWidget {
-  const RequestChat({super.key, required this.requestId, required this.staff});
+  const RequestChat({super.key, required this.requestId, required this.staff, this.readOnly = false});
 
   final String requestId;
   final bool staff;
+
+  /// Se leen los mensajes, pero no se escribe.
+  final bool readOnly;
 
   @override
   ConsumerState<RequestChat> createState() => _RequestChatState();
@@ -318,6 +383,7 @@ class _RequestChatState extends ConsumerState<RequestChat> {
             AsyncError() => [Text('No se pudieron cargar los mensajes.', style: AppTextStyles.secondary)],
             _ => [const Padding(padding: EdgeInsets.all(AppSpacing.md), child: Center(child: CircularProgressIndicator()))],
           },
+          if (!widget.readOnly) ...[
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
@@ -340,6 +406,7 @@ class _RequestChatState extends ConsumerState<RequestChat> {
               ),
             ],
           ),
+          ],
         ],
       ),
     );
@@ -355,16 +422,24 @@ Future<String?> _askText(BuildContext context, {required String title, required 
 /// Broker que atiende la solicitud. Llega sin broker y administración lo asigna (o lo cambia);
 /// los datos de la persona no cambian y su cita pasa al broker elegido.
 class _BrokerCard extends ConsumerWidget {
-  const _BrokerCard({required this.request, required this.admin, required this.onAssign});
+  const _BrokerCard({required this.request, required this.admin, required this.broker, required this.readOnly, required this.onAssign, required this.onTake});
 
   final LeadRequest request;
   final bool admin;
+
+  /// También es broker (puede ser administración y broker a la vez): puede tomar la solicitud.
+  final bool broker;
+
+  /// Otro broker tiene la prioridad: aquí no se toma ni se asigna.
+  final bool readOnly;
   final void Function(String id, String name) onAssign;
+  final VoidCallback onTake;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unassigned = request.brokerId == null;
-    final brokers = admin ? ref.watch(assignableBrokersProvider).value ?? const <({String id, String name})>[] : const <({String id, String name})>[];
+    final assigns = admin && !readOnly;
+    final brokers = assigns ? ref.watch(assignableBrokersProvider).value ?? const <({String id, String name})>[] : const <({String id, String name})>[];
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
@@ -377,9 +452,14 @@ class _BrokerCard extends ConsumerWidget {
         children: [
           Text('Broker asignado', style: AppTextStyles.cardTitle),
           const SizedBox(height: AppSpacing.xs),
-          if (!admin)
-            Text(request.brokerName ?? 'Sin asignar', style: AppTextStyles.body)
-          else ...[
+          if (unassigned && broker && !readOnly) ...[
+            Text('Nadie la atiende todavía. El primero que la toma se queda con su seguimiento.', style: AppTextStyles.body),
+            const SizedBox(height: AppSpacing.sm),
+            PrimaryButton(label: 'Atender esta solicitud', icon: Icons.handshake_outlined, onPressed: onTake),
+            if (assigns) const SizedBox(height: AppSpacing.md),
+          ] else if (!assigns)
+            Text(request.brokerName ?? 'Sin asignar', style: AppTextStyles.body),
+          if (assigns) ...[
             DropdownButtonFormField<String>(
               key: ValueKey(request.brokerId),
               initialValue: brokers.any((b) => b.id == request.brokerId) ? request.brokerId : null,

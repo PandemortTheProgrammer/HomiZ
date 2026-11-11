@@ -36,10 +36,9 @@ class _RequestsPageState extends ConsumerState<RequestsPage> {
   @override
   Widget build(BuildContext context) {
     final staff = ref.watch(sessionProvider.select((s) => s.value?.isStaff ?? false));
-    // Administración ve primero las que llegaron sin broker (las asigna ella)
-    final admin = ref.watch(sessionProvider.select((s) => s.value?.isAdmin ?? false));
-    final filters = [if (admin) 'sin_asignar', ..._filters];
-    final labels = [if (admin) 'Sin asignar', ..._labels];
+    // Primero las que nadie atiende: el primer broker que la toma se queda con el seguimiento
+    final filters = ['sin_asignar', ..._filters];
+    final labels = ['Sin asignar', ..._labels];
     final status = staff ? filters[_filter.clamp(0, filters.length - 1)] : null;
     final list = ref.watch(requestsProvider(status));
     return Scaffold(
@@ -76,7 +75,8 @@ class _RequestsPageState extends ConsumerState<RequestsPage> {
                       title: staff ? '${r.name ?? ''} · ${r.folio}' : '${r.reasonLabel} · ${r.folio}',
                       subtitle: [
                         if (staff) r.reasonLabel,
-                        if (staff) r.brokerName ?? 'Sin broker asignado',
+                        if (staff) r.priorityLabel ?? r.brokerName ?? 'Sin broker asignado',
+                        if (staff && r.overdue) 'Sin atender',
                         r.propertyName ?? r.summary,
                         Fmt.dayMonthShort(r.createdAt),
                         if (r.proposalCount > 0) '${r.proposalCount} ${r.proposalCount == 1 ? 'casa propuesta' : 'casas propuestas'}' else if (r.response != null) 'Respondida',

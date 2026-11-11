@@ -69,6 +69,7 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
     return Scaffold(
       body: AuthBackground(
         child: Form(
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           key: _form,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../services/network/api_exception.dart';
 import '../../widgets/theme/app_spacing.dart';
@@ -19,6 +20,7 @@ import '../../widgets/appointments/appointment_chat.dart';
 import '../../widgets/appointments/appointment_place_cards.dart';
 import '../../widgets/appointments/my_data_card.dart';
 import '../../widgets/appointments/staff_appointment_actions.dart';
+import '../../widgets/common/visit_time.dart';
 
 /// Cliente: la fecha de la visita la acuerdan ambos. Si el asesor propuso la fecha, «Aceptar» o «Proponer otra»;
 /// si la propuso el cliente, espera a que el asesor la confirme (y también puede proponer otra).
@@ -59,10 +61,9 @@ class _DateAgreementState extends ConsumerState<_DateAgreement> {
       helpText: 'Día que te queda mejor',
     );
     if (day == null || !mounted) return;
-    final time = await showTimePicker(initialEntryMode: TimePickerEntryMode.input, context: context, initialTime: TimeOfDay.fromDateTime(a.scheduledAt), helpText: 'Hora que te queda mejor');
+    final time = await pickVisitTime(context, initial: TimeOfDay.fromDateTime(a.scheduledAt));
     if (time == null || !mounted) return;
-    final total = ((time.hour * 60 + time.minute) / 15).round() * 15; // bloques de 15 minutos
-    final when = DateTime(day.year, day.month, day.day, (total ~/ 60) % 24, total % 60);
+    final when = DateTime(day.year, day.month, day.day, time.hour, time.minute);
     final ok = await showConfirmDialog(
       context,
       title: 'Proponer otra fecha',
@@ -215,6 +216,15 @@ class _DetailState extends ConsumerState<_Detail> {
             Text(staff ? (lead['linked'] == true ? 'Formulario que llenó' : 'Su solicitud más reciente') : 'Lo que nos contaste', style: AppTextStyles.sectionTitle),
             const SizedBox(height: AppSpacing.sm),
             RequestFormSections(request: LeadRequest.fromJson(lead), staff: staff),
+            // La persona corrige aquí mismo lo que nos contó
+            if (!staff && lead['status'] != 'cerrado') ...[
+              const SizedBox(height: AppSpacing.md),
+              OutlinedButton.icon(
+                onPressed: () => context.push('/home/requests/new', extra: LeadRequest.fromJson(lead)),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Cambiar mi información'),
+              ),
+            ],
           ] else if (!staff) ...[
             Text('Mis Datos', style: AppTextStyles.sectionTitle),
             const SizedBox(height: AppSpacing.sm),

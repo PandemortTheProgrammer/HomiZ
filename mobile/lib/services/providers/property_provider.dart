@@ -12,9 +12,17 @@ final propertyBySlugProvider = FutureProvider.family<PropertyDetail?, String>((r
 
 final catalogProvider =FutureProvider<List<PropertyDetail>>((ref) => ref.watch(propertyRepositoryProvider).catalog());
 
-/// Casas del personal: el broker ve las suyas; la administración, todo el inventario. [q] busca por nombre o clave.
-final inventoryProvider = FutureProvider.family<List<PropertyDetail>, String>((ref, q) {
+/// Todo el inventario: quien atiende una solicitud puede proponer o agendar cualquier casa, no solo las suyas.
+final allHousesProvider = FutureProvider<List<PropertyDetail>>((ref) {
+  ref.watch(sessionProvider.select((s) => s.value?.id));
+  return ref.watch(propertyRepositoryProvider).inventory(brokerId: null, q: '');
+});
+
+/// Casas del personal. Propietario: todo el inventario. Los demás: las suyas y las disponibles
+/// (las pueden ver, proponer y agendar; expediente y pagos los lleva el administrador que tiene la casa). [q] busca por nombre o clave.
+final inventoryProvider = FutureProvider.family<List<PropertyDetail>, String>((ref, q) async {
   final user = ref.watch(sessionProvider).value;
-  final onlyMine = user != null && !user.isAdmin && user.isBroker;
-  return ref.watch(propertyRepositoryProvider).inventory(brokerId: onlyMine ? user.id : null, q: q);
+  final all = await ref.watch(propertyRepositoryProvider).inventory(brokerId: null, q: q);
+  if (user == null || user.isOwner) return all;
+  return all.where((h) => h.broker?.id == user.id || (h.visibility == 'publicada' && (h.status == 'disponible' || h.status == 'reservada'))).toList();
 });

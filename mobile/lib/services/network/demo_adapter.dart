@@ -11,7 +11,7 @@ class DemoAdapter implements HttpClientAdapter {
   static const _clientId = 'demo-cliente';
   static const _brokerId = 'demo-broker';
   static const _adminId = 'demo-admin';
-  static const _permissions = ['appointments.manage', 'leads.manage', 'clients.manage', 'properties.read_all', 'documents.manage'];
+  static const _permissions = ['appointments.manage', 'leads.manage', 'clients.manage', 'properties.read_all', 'properties.manage', 'documents.manage', 'payments.register', 'maintenance.manage'];
 
   var _seq = 30;
   Map<String, Object?> _client = {
@@ -21,11 +21,11 @@ class DemoAdapter implements HttpClientAdapter {
     'phone': '998 123 4567',
     'type': 'client',
     'initials': 'LM',
-    'client': {'id': 'demo-expediente', 'kind': 'cliente', 'hasPets': false, 'petsCount': 0, 'occupants': 2},
+    'client': {'id': 'demo-expediente', 'kind': 'inquilino', 'propertyId': 'casa-5', 'hasPets': false, 'petsCount': 0, 'occupants': 2},
   };
 
   static const Map<String, Object?> _broker = {'id': _brokerId, 'name': 'Mariana Solís', 'email': 'broker@demo.mx', 'phone': '998 100 0002', 'type': 'staff', 'initials': 'MS', 'roles': ['broker'], 'permissions': _permissions};
-  static const Map<String, Object?> _admin = {'id': _adminId, 'name': 'Lucía Méndez', 'email': 'admin@demo.mx', 'phone': '998 100 0001', 'type': 'staff', 'initials': 'LM', 'roles': ['admin', 'owner'], 'permissions': [..._permissions, 'contracts.manage', 'users.manage']};
+  static const Map<String, Object?> _admin = {'id': _adminId, 'name': 'Lucía Méndez', 'email': 'admin@demo.mx', 'phone': '998 100 0001', 'type': 'staff', 'initials': 'LM', 'roles': ['admin', 'owner'], 'permissions': [..._permissions, 'contracts.manage', 'users.manage', 'payments.correct', 'documents.delete']};
 
   static Map<String, Object?> _house(String id, String code, String name, String zone, String operation, num price, int rec, num banos, num m2) => {
     'id': id,
@@ -150,7 +150,10 @@ class DemoAdapter implements HttpClientAdapter {
   ];
 
   static String _ago(int days) => DateTime.now().subtract(Duration(days: days)).toUtc().toIso8601String();
-  static String _ahead(int days) => DateTime.now().add(Duration(days: days)).toUtc().toIso8601String();
+  static String _ahead(int days) {
+    final d = DateTime.now().add(Duration(days: days));
+    return DateTime.utc(d.year, d.month, d.day, 15, 30).toIso8601String(); // 10:30 a.m. en Cancún
+  }
   static String _now() => DateTime.now().toUtc().toIso8601String();
 
   static Map<String, Object?> _proposal(String id, Map<String, Object?> house, String? note) => {'id': id, 'note': note, 'property': house};
@@ -280,6 +283,7 @@ class DemoAdapter implements HttpClientAdapter {
     }
     if (tail == 'appointment') {
       final a = _newAppointment(d['propertyId']! as String, d['scheduledAt']! as String, 'client', r['ownerId']! as String, note: d['note'] as String?);
+      if (d['agreed'] == true) a['status'] = 'confirmada';
       r['appointments'] = [
         {'id': a['id'], 'code': a['code'], 'scheduledAt': a['scheduledAt'], 'status': a['status'], 'property': {'id': a['houseId'], 'name': _houseById(a['houseId'])['name']}, 'broker': 'Mariana Solís'},
       ];
@@ -297,19 +301,183 @@ class DemoAdapter implements HttpClientAdapter {
     return (200, r);
   }
 
+  /* ---------- Fases 9 a 12: casa rentada, pagos, reportes, proveedores y compras ---------- */
+
+  static String _dia(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  final Map<String, Object?> _rentada = {
+    ..._house('casa-5', 'ZUG-005', 'Casa Las Palmas', 'Zona Hotelera', 'renta', 12000, 3, 2, 170),
+    'status': 'rentada',
+    'address': 'Blvd. Kukulcán 45, Zona Hotelera',
+  };
+
+  late final _notas = _crearNotas();
+
+  List<Map<String, Object?>> _crearNotas() {
+    final hoy = DateTime.now();
+    return [
+      for (var i = 0; i < 12; i++)
+        () {
+          final vence = DateTime(hoy.year, hoy.month - 4 + i, 5);
+          final pagada = i < 3;
+          return <String, Object?>{
+            'id': 'pagare-${i + 1}',
+            'number': i + 1,
+            'label': 'Pagaré ${(i + 1).toString().padLeft(2, '0')}',
+            'amount': 12000,
+            'dueDate': _dia(vence),
+            'status': pagada ? 'paid' : (vence.isBefore(hoy) ? 'overdue' : 'pending'),
+            'payment': pagada ? {'id': 'pago-${i + 1}', 'amount': 12000, 'paidAt': _dia(vence), 'receiptFolio': 'REC-ZUG-005-${(i + 1).toString().padLeft(2, '0')}', 'registeredBy': 'Lucía Méndez'} : null,
+            'proofDocumentId': pagada ? 'doc-recibo-${i + 1}' : null,
+            'stamps': <Object>[],
+            'property': {'id': 'casa-5', 'name': 'Casa Las Palmas'},
+            'client': {'id': 'demo-expediente', 'name': 'Laura Méndez'},
+          };
+        }(),
+    ];
+  }
+
+  (int, Object?) _pagares(Map<String, dynamic> q) {
+    final filtro = q['status'];
+    final estados = filtro is List ? filtro.map((e) => '$e').toList() : (filtro == null ? const <String>[] : ['$filtro']);
+    final lista = estados.isEmpty ? _notas : _notas.where((n) => estados.contains(n['status'])).toList();
+    final pendientes = _notas.where((n) => n['status'] != 'paid').toList();
+    final sig = pendientes.firstOrNull;
+    return (200, {
+      'data': lista,
+      'summary': {
+        'total': _notas.length,
+        'paid': _notas.length - pendientes.length,
+        'remaining': pendientes.length,
+        'remainingAmount': pendientes.length * 12000,
+        'next': sig == null ? null : {'number': sig['number'], 'dueDate': sig['dueDate'], 'amount': sig['amount']},
+      },
+    });
+  }
+
+  (int, Object?) _registrarPago(String id, Map<dynamic, dynamic> d) {
+    final n = _notas.firstWhere((x) => x['id'] == id);
+    n['status'] = 'paid';
+    n['payment'] = {'id': 'pago-${++_seq}', 'amount': n['amount'], 'paidAt': d['paidAt'] ?? _dia(DateTime.now()), 'receiptFolio': 'REC-ZUG-005-${'${n['number']}'.padLeft(2, '0')}', 'notes': d['notes'], 'registeredBy': 'Demo'};
+    return (201, n);
+  }
+
+  List<Map<String, Object?>> get _recibos => [
+    for (final n in _notas.take(4))
+      {
+        'id': 'recibo-${n['id']}',
+        'kind': n['status'] == 'paid' ? 'bill' : 'charge_slip',
+        'concept': '${n['status'] == 'paid' ? 'Recibo' : 'Ficha de cobro'} · ${n['label']}',
+        'amount': n['amount'],
+        'dueDate': n['dueDate'],
+        'status': n['status'],
+      },
+    {'id': 'recibo-luz', 'kind': 'bill', 'concept': 'Recibo de luz', 'periodLabel': 'sep-oct', 'amount': 1240, 'status': 'pending'},
+    {'id': 'recibo-agua', 'kind': 'bill', 'concept': 'Recibo de agua', 'periodLabel': 'oct', 'amount': 415, 'status': 'paid'},
+  ];
+
+  (int, Object?) _expediente(String id, String role) {
+    final propia = id == 'casa-5';
+    final h = propia ? _rentada : _houseById(id);
+    final hoy = DateTime.now();
+    return (200, {
+      'property': {'id': h['id'], 'name': h['name'], 'zone': h['zone'], 'address': h['address'], 'city': h['city'], 'rec': h['rec'], 'banos': h['banos'], 'm2': h['m2'], 'amenities': h['amenities'], 'status': h['status'], 'broker': {'name': 'Mariana Solís', 'phone': '998 100 0002'}},
+      'contract': propia ? {'id': 'contrato-1', 'startDate': _dia(DateTime(hoy.year, hoy.month - 4, 5)), 'endDate': _dia(DateTime(hoy.year, hoy.month + 8, 4)), 'monthlyRent': 12000, 'paymentDay': 5, 'deposit': 12000, 'status': 'active'} : null,
+      'sections': propia
+          ? [
+              {'key': 'contract', 'title': 'Contrato de renta', 'subtitle': 'Vigente', 'documentIds': ['doc-contrato']},
+              {'key': 'deposit', 'title': 'Depósito en garantía', 'subtitle': r'$12,000 · comprobante', 'documentIds': ['doc-deposito']},
+              {'key': 'delivery', 'title': 'Ficha de entrega', 'subtitle': '12 fotos · llaves y estado', 'documentIds': ['doc-entrega']},
+              {'key': 'documents', 'title': 'Documentos', 'subtitle': 'Reglamento y anexos · 1 archivo', 'documentIds': ['doc-reglamento']},
+            ]
+          : <Object>[],
+      'documents': propia
+          ? [
+              for (final (i, n) in const ['Contrato de renta', 'Depósito', 'Ficha de entrega', 'Reglamento'].indexed)
+                {'id': const ['doc-contrato', 'doc-deposito', 'doc-entrega', 'doc-reglamento'][i], 'type': const ['contract', 'deposit', 'delivery_sheet', 'other'][i], 'name': n, 'mime': 'application/pdf', 'createdAt': _dia(hoy), 'visibleToClient': true},
+            ]
+          : <Object>[],
+      'utilities': propia ? {'reminderDay': 5, 'electricity': {'company': 'CFE', 'serviceNumber': '402 180 556 901', 'app': 'CFE Contigo', 'url': 'https://www.cfe.mx'}, 'water': {'company': 'Aguakan', 'serviceNumber': '0077 3391 0215', 'app': 'Aguakan', 'url': 'https://www.aguakan.com'}} : null,
+      'broker': {'name': 'Mariana Solís', 'phone': '998 100 0002', 'email': 'broker@demo.mx'},
+      'tenant': propia && role != 'client' ? {'id': 'demo-expediente', 'name': 'Laura Méndez', 'phone': '998 123 4567', 'email': 'cliente@demo.mx'} : null,
+    });
+  }
+
+  late final _reportes = <Map<String, Object?>>[_reporte('Fuga en el baño', 'Gotea la llave del lavabo.', 'Plomería', 'alta', 'in_repair', 'En reparación')];
+
+  Map<String, Object?> _reporte(String titulo, String detalle, String categoria, String prioridad, String estado, String etiqueta) => {
+    'id': 'reporte-${++_seq}',
+    'property': {'id': 'casa-5', 'code': 'ZUG-005', 'name': 'Casa Las Palmas'},
+    'title': titulo,
+    'description': detalle,
+    'category': categoria,
+    'priority': prioridad,
+    'subtitle': '$categoria - prioridad $prioridad',
+    'status': estado,
+    'statusLabel': etiqueta,
+    'provider': estado == 'in_repair' ? {'id': 'prov-1', 'name': 'Plomería Caribe', 'specialty': 'Plomería', 'phone': '998 200 0101'} : null,
+    'createdAt': _now(),
+    'timeline': <Map<String, Object?>>[
+      {'id': 't${++_seq}', 'status': estado, 'statusLabel': etiqueta, 'comment': 'Reporte de ejemplo.', 'author': 'Demo', 'createdAt': _now()},
+    ],
+    'photos': {'before': <Object>[], 'after': <Object>[]},
+  };
+
+  (int, Object?) _listaReportes(Map<String, dynamic> q) {
+    final filtro = q['status'];
+    final estados = filtro is List ? filtro.map((e) => '$e').toList() : (filtro == null ? const <String>[] : ['$filtro']);
+    return (200, {'data': estados.isEmpty ? _reportes : _reportes.where((r) => estados.contains(r['status'])).toList()});
+  }
+
+  (int, Object?) _actualizarReporte(String id, Map<dynamic, dynamic> d) {
+    final r = _reportes.firstWhere((x) => x['id'] == id);
+    const etiquetas = {'in_review': 'En revisión', 'in_repair': 'En reparación', 'resolved': 'Resuelto', 'cancelled': 'Cancelado'};
+    final estado = '${d['status'] ?? r['status']}';
+    r['status'] = estado;
+    r['statusLabel'] = etiquetas[estado] ?? estado;
+    (r['timeline']! as List).insert(0, {'id': 't${++_seq}', 'status': estado, 'statusLabel': r['statusLabel'], 'comment': d['comment'], 'author': 'Demo', 'createdAt': _now()});
+    return (200, r);
+  }
+
+  static const _proveedores = [
+    {'id': 'prov-1', 'name': 'Plomería Caribe', 'specialty': 'Plomería', 'phone': '998 200 0101', 'email': 'plomeria@demo.mx', 'zone': 'Cancún centro', 'notes': 'Atiende urgencias en fin de semana', 'active': true},
+    {'id': 'prov-2', 'name': 'Electro Sureste', 'specialty': 'Electricidad', 'phone': '998 200 0102', 'email': 'electro@demo.mx', 'zone': 'Todo Cancún', 'active': true},
+    {'id': 'prov-3', 'name': 'Albercas Nichupté', 'specialty': 'Albercas', 'phone': '998 200 0103', 'email': 'albercas@demo.mx', 'zone': 'Zona sur', 'notes': 'Mantenimiento mensual', 'active': true},
+  ];
+
+  static const _compras = [
+    {'id': 'venta-1', 'folio': 'VEN-001', 'status': 'closed', 'saleDate': '2026-11-01', 'price': 4500000, 'property': {'name': 'Casa Kanán', 'code': 'ZUG-010', 'zone': 'Cumbres'}, 'paymentMethod': 'Crédito bancario', 'notary': 'Notaría 12, Cancún', 'hasDocument': true},
+  ];
+
   (int, Object?) _dashboard(String role) {
     final mine = _visibleAppointments(role);
     if (role == 'client') {
       final next = mine.where((a) => a['status'] == 'por-confirmar' || a['status'] == 'confirmada').firstOrNull;
       return (200, {
         'nextAppointment': next == null ? null : {'id': next['id'], 'code': next['code'], 'propertyName': (next['property']! as Map)['name'], 'scheduledAt': next['scheduledAt'], 'status': next['status']},
+        'property': {'id': 'casa-5', 'name': 'Casa Las Palmas', 'zone': 'Zona Hotelera'},
+        'nextPayment': () {
+          final n = _notas.where((x) => x['status'] != 'paid').firstOrNull;
+          return n == null ? null : {'id': n['id'], 'number': n['number'], 'amount': n['amount'], 'dueDate': n['dueDate'], 'status': n['status']};
+        }(),
+        'openReports': () {
+          final abiertos = _reportes.where((r) => r['status'] != 'resolved' && r['status'] != 'cancelled').toList();
+          final r = abiertos.firstOrNull;
+          return {'count': abiertos.length, 'latest': r == null ? null : {'id': r['id'], 'title': r['title'], 'status': r['status'], 'createdAt': r['createdAt']}};
+        }(),
         'unreadNotifications': _notifications.where((n) => n['read'] == false).length,
       });
     }
     final pending = mine.where((a) => a['status'] == 'por-confirmar').toList();
     return (200, {
       'roles': _userOf(role)['roles'],
-      'counts': {'appointmentsToConfirm': pending.length, 'appointmentsToday': 0, 'newLeads': _visibleRequests(role, {'status': 'nuevo'}).length},
+      'counts': {'overdueNotes': _notas.where((n) => n['status'] == 'overdue').length, 'openReports': _reportes.where((r) => r['status'] != 'resolved' && r['status'] != 'cancelled').length, 'appointmentsToConfirm': pending.length, 'appointmentsToday': 0, 'newLeads': _visibleRequests(role, {'status': 'nuevo'}).length},
+      'overdueNotes': [
+        for (final n in _notas.where((x) => x['status'] == 'overdue')) {'id': n['id'], 'number': n['number'], 'amount': n['amount'], 'dueDate': n['dueDate'], 'clientName': 'Laura Méndez', 'propertyName': 'Casa Las Palmas', 'propertyId': 'casa-5'},
+      ],
+      'newReports': [
+        for (final r in _reportes.where((x) => x['status'] != 'resolved' && x['status'] != 'cancelled')) {'id': r['id'], 'title': r['title'], 'priority': r['priority'], 'propertyName': 'Casa Las Palmas', 'propertyId': 'casa-5', 'status': r['status'], 'createdAt': r['createdAt']},
+      ],
       'pendingAppointments': [
         for (final a in pending) {'id': a['id'], 'code': a['code'], 'clientName': (a['client']! as Map)['name'], 'propertyName': (a['property']! as Map)['name'], 'scheduledAt': a['scheduledAt']},
       ],
@@ -359,7 +527,23 @@ class DemoAdapter implements HttpClientAdapter {
         return (204, null);
       case ('GET', '/properties'):
         final q = '${o.queryParameters['q'] ?? ''}'.toLowerCase();
-        return (200, {'data': _houses.where((h) => '${h['name']} ${h['code']}'.toLowerCase().contains(q)).toList()});
+        final casas = [..._houses, if (o.queryParameters['sort'] == 'updated') _rentada];
+        return (200, {'data': casas.where((h) => '${h['name']} ${h['code']}'.toLowerCase().contains(q)).toList()});
+      case ('GET', '/promissory-notes'):
+        return _pagares(o.queryParameters);
+      case ('GET', '/receipts'):
+        return (200, {'data': _recibos});
+      case ('GET', '/maintenance-reports'):
+        return _listaReportes(o.queryParameters);
+      case ('POST', '/maintenance-reports'):
+        final r = _reporte('${d['title']}', '${d['description']}', '${d['category']}', '${d['priority'] ?? 'media'}', 'reported', 'Reportado');
+        _reportes.insert(0, r);
+        return (201, r);
+      case ('GET', '/providers'):
+        final texto = '${o.queryParameters['q'] ?? ''}'.toLowerCase();
+        return (200, {'data': _proveedores.where((p) => '${p['name']} ${p['specialty']} ${p['zone']}'.toLowerCase().contains(texto)).toList()});
+      case ('GET', '/sales'):
+        return (200, {'data': role == 'client' ? _compras : const <Object>[]});
       case ('GET', '/requests'):
         return (200, {'data': _visibleRequests('client', const {})});
       case ('POST', '/requests'):
@@ -380,7 +564,13 @@ class DemoAdapter implements HttpClientAdapter {
         _notifications.firstWhere((n) => n['id'] == parts[1])['read'] = true;
         return (204, null);
       case 'properties':
-        return (200, _houseById(parts[1]));
+        if (tail == 'dossier') return _expediente(parts[1], role);
+        return (200, parts[1] == 'casa-5' ? _rentada : _houseById(parts[1]));
+      case 'promissory-notes':
+        if (tail == 'payments' && method == 'POST') return _registrarPago(parts[1], d);
+      case 'maintenance-reports':
+        if (tail == 'updates' && method == 'POST') return _actualizarReporte(parts[1], d);
+        if (parts.length == 2) return (200, _reportes.firstWhere((r) => r['id'] == parts[1]));
       case 'requests' || 'leads':
         return _lead(parts[1], method, tail, role, o.data);
       case 'appointments':

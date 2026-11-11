@@ -174,6 +174,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
   @override
   Widget build(BuildContext context) {
     return Form(
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       key: _form,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -314,6 +315,7 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
   @override
   Widget build(BuildContext context) {
     return Form(
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       key: _form,
       child: Column(
         mainAxisSize: MainAxisSize.min,

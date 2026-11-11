@@ -30,6 +30,10 @@ abstract class AppUser with _$AppUser {
   /// Administración o propietario (el propietario decide quién es broker, administración o ambos).
   bool get isAdmin => roles.contains('admin') || roles.contains('owner');
   bool get isBroker => roles.contains('broker');
+  bool get isOwner => roles.contains('owner');
+
+  /// Expediente y pagos de una casa: el propietario, o el administrador que la tiene asignada.
+  bool manages(String? brokerId) => isOwner || (can('properties.manage') && brokerId == id);
 
   /// ¿Tiene el permiso? (las opciones del personal se ocultan si no; la API vuelve a validar).
   bool can(String permission) => permissions.contains(permission);

@@ -12,6 +12,7 @@ import '../common/states.dart';
 import '../../models/appointment.dart';
 import '../../services/providers/appointments_provider.dart';
 import 'appointment_card.dart';
+import '../common/primary_button.dart';
 
 /// Citas por estado: Por confirmar · Confirmadas · Realizadas · Canceladas (con cuántas hay en cada una).
 /// La usan el personal (agenda) y el cliente (Mis citas); cada cita aparece en una sola pestaña.
@@ -90,10 +91,18 @@ class _AppointmentsByStatusState extends ConsumerState<AppointmentsByStatus> {
                   child: OutlinedButton.icon(onPressed: () => context.go('/requests'), icon: const Icon(Icons.mark_email_unread_outlined), label: const Text('Solicitudes por agendar')),
                 )
               // Una sola cita vigente por persona: si ya tiene una, «Solicitar visita» la cambia en lugar de crear otra
-              : OutlinedButton.icon(
-                  onPressed: () => context.push('/appointments/catalog'),
-                  icon: const Icon(Icons.add_rounded),
-                  label: Text(counts[0] + counts[1] > 0 ? 'Cambiar mi visita a otra casa' : 'Solicitar visita'),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Rentar, comprar, publicar u otro motivo: el formulario de Contáctanos
+                    PrimaryButton(label: 'Nueva solicitud', icon: Icons.add_home_outlined, onPressed: () => context.push('/home/requests/new')),
+                    const SizedBox(height: AppSpacing.sm),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/appointments/catalog'),
+                      icon: const Icon(Icons.add_rounded),
+                      label: Text(counts[0] + counts[1] > 0 ? 'Cambiar mi visita a otra casa' : 'Solicitar visita'),
+                    ),
+                  ],
                 ),
         ),
         const SizedBox(height: AppSpacing.md),

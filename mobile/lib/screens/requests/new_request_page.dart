@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../services/utils/validators.dart';
 import '../../services/network/api_exception.dart';
 import '../../widgets/theme/app_colors.dart';
 import '../../widgets/theme/app_spacing.dart';
@@ -15,7 +16,9 @@ import '../../services/providers/pending_visit_provider.dart';
 import '../../services/providers/session_provider.dart';
 import '../../services/providers/site_link_provider.dart';
 import '../../services/providers/property_provider.dart';
+import '../../services/repositories/requests_repository.dart';
 import '../../services/providers/requests_provider.dart';
+import '../../widgets/common/visit_time.dart';
 
 /// «¿Qué quieres hacer?»: el mismo formulario de «Contáctanos» del sitio (rentar, comprar, publicar u otro).
 /// Se abre solo al crear una cuenta o al entrar por primera vez desde un QR del sitio ([welcome]); con [slug] (QR de una casa)
@@ -29,10 +32,16 @@ const _available = ['Ya está disponible', 'En menos de 3 meses', 'Más adelante
 const _subjects = ['Asesoría para elegir zona', 'Avalúo de mi propiedad', 'Administración de mi propiedad', 'Aclaración o queja', 'Otro tema'];
 
 class NewRequestPage extends ConsumerStatefulWidget {
-  const NewRequestPage({super.key, this.slug, this.welcome = false});
+  const NewRequestPage({super.key, this.slug, this.welcome = false, this.reason, this.editing});
 
   final String? slug;
   final bool welcome;
+
+  /// Motivo ya elegido (rentar, comprar, publicar u otro)
+  final String? reason;
+
+  /// Solicitud que el cliente está corrigiendo: el formulario sale con lo que mandó
+  final LeadRequest? editing;
 
   @override
   ConsumerState<NewRequestPage> createState() => _NewRequestPageState();
@@ -71,9 +80,44 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
 
   bool get _looking => _reason == 'rentar' || _reason == 'comprar';
 
+  /// Llena el formulario con lo que mandó. Si un valor ya no está en una lista, queda sin definir.
+  void _fill(LeadRequest e) {
+    final p = e.payload;
+    String? pick(String key, List<String> options) => options.contains(p[key]) ? p[key] : null;
+    _reason = const ['rentar', 'comprar', 'publicar', 'otro'].contains(e.reason) ? e.reason : (p['quiere'] ?? (p['operacion'] == 'compra' ? 'comprar' : 'rentar'));
+    final publish = _reason == 'publicar';
+    _message.text = e.message ?? '';
+    _place.text = p[publish ? 'inmueble_zona' : 'zona'] ?? '';
+    _min.text = p['presupuesto_min'] ?? '';
+    _max.text = p['presupuesto_max'] ?? '';
+    _nationality.text = p['nacionalidad'] ?? '';
+    _job.text = p['ocupacion'] ?? '';
+    _petsDetail.text = p['mascotas_detalle'] ?? '';
+    _price.text = p['inmueble_precio'] ?? '';
+    _meters.text = p['inmueble_m2'] ?? '';
+    _pets = p['mascotas'] == 'si';
+    _rooms = p[publish ? 'inmueble_recamaras' : 'recamaras'] ?? _rooms;
+    _baths = p['banos'] ?? _baths;
+    _publishBaths = p['inmueble_banos'] ?? _publishBaths;
+    _people = p['personas'] ?? _people;
+    _publishOp = p['inmueble_operacion'] ?? _publishOp;
+    _type = pick(publish ? 'inmueble_tipo' : 'tipo_inmueble', [for (final (_, name) in propertyTypes) name]);
+    _moveInWhen = pick('mudanza', _moveIn);
+    _term = pick('plazo_renta', _rentTerm);
+    _pay = pick('forma_pago', _payment);
+    _availableWhen = pick('inmueble_disponible', _available);
+    _subject = pick('asunto', _subjects);
+  }
+
   @override
   void initState() {
     super.initState();
+    final e = widget.editing;
+    if (e != null) {
+      _fill(e);
+    } else if (const ['rentar', 'comprar', 'publicar', 'otro'].contains(widget.reason)) {
+      _reason = widget.reason!;
+    }
     // Ya llegó al formulario: el enlace del QR no se vuelve a usar al entrar otra vez
     Future.microtask(() {
       ref.read(pendingVisitProvider.notifier).clear();
@@ -115,19 +159,61 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      initialEntryMode: TimePickerEntryMode.input,
-      context: context,
-      initialTime: _time ?? const TimeOfDay(hour: 11, minute: 0),
-      helpText: 'Hora de tu cita (la visita dura 15 min)',
-    );
-    if (picked == null) return;
-    final total = ((picked.hour * 60 + picked.minute) / 15).round() * 15; // bloques de 15 minutos
-    setState(() => _time = TimeOfDay(hour: (total ~/ 60) % 24, minute: total % 60));
+    final picked = await pickVisitTime(context, initial: _time);
+    if (picked != null) setState(() => _time = picked);
   }
+
+  Map<String, Object?> get _payload => {
+        if (_looking) ...{
+          'operacion': _reason == 'comprar' ? 'compra' : 'renta',
+          'tipo_inmueble': _type,
+          'zona': _place.text,
+          'presupuesto': _budgetLabel(),
+          'presupuesto_min': _amount(_min.text),
+          'presupuesto_max': _amount(_max.text),
+          'recamaras': _rooms,
+          'banos': _baths,
+          'personas': _people,
+          'mascotas': _pets ? 'si' : 'no',
+          'mascotas_detalle': _pets ? _petsDetail.text : null,
+          'mudanza': _moveInWhen,
+          if (_reason == 'rentar') ...{'nacionalidad': _nationality.text, 'ocupacion': _job.text, 'plazo_renta': _term},
+          if (_reason == 'comprar') 'forma_pago': _pay,
+        },
+        if (_reason == 'publicar') ...{
+          'inmueble_tipo': _type ?? 'Casa',
+          'inmueble_operacion': _publishOp,
+          'inmueble_zona': _place.text,
+          'inmueble_recamaras': _rooms,
+          'inmueble_banos': _publishBaths,
+          'inmueble_m2': _amount(_meters.text),
+          'inmueble_disponible': _availableWhen,
+          'inmueble_precio': _amount(_price.text),
+        },
+        if (_reason == 'otro') 'asunto': _subject,
+      };
 
   Future<void> _submit(String? slug) async {
     if (!_form.currentState!.validate()) return setState(() => _error = 'Revisa los campos marcados en rojo.');
+    final editing = widget.editing;
+    if (editing != null) {
+      FocusScope.of(context).unfocus();
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+      try {
+        await ref.read(requestActionsProvider).edit(editing.id, message: _message.text, payload: _payload);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Guardamos tus cambios y le avisamos a tu asesor.')));
+        context.pop();
+      } catch (e) {
+        if (mounted) setState(() => _error = ApiException.from(e).message);
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
+      return;
+    }
     final withVisit = slug != null && _looking && _visit;
     if (withVisit && (_date == null || _time == null)) return setState(() => _error = 'Elige el día y la hora de tu cita, o desactiva «Quiero agendar una cita».');
     FocusScope.of(context).unfocus();
@@ -143,35 +229,7 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
             propertySlug: _looking ? slug : null,
             preferredDate: withVisit ? '${_date!.year}-${two(_date!.month)}-${two(_date!.day)}' : null,
             preferredTime: withVisit ? '${two(_time!.hour)}:${two(_time!.minute)}' : null,
-            payload: {
-              if (_looking) ...{
-                'operacion': _reason == 'comprar' ? 'compra' : 'renta',
-                'tipo_inmueble': _type,
-                'zona': _place.text,
-                'presupuesto': _budgetLabel(),
-                'presupuesto_min': _amount(_min.text),
-                'presupuesto_max': _amount(_max.text),
-                'recamaras': _rooms,
-                'banos': _baths,
-                'personas': _people,
-                'mascotas': _pets ? 'si' : 'no',
-                'mascotas_detalle': _pets ? _petsDetail.text : null,
-                'mudanza': _moveInWhen,
-                if (_reason == 'rentar') ...{'nacionalidad': _nationality.text, 'ocupacion': _job.text, 'plazo_renta': _term},
-                if (_reason == 'comprar') 'forma_pago': _pay,
-              },
-              if (_reason == 'publicar') ...{
-                'inmueble_tipo': _type ?? 'Casa',
-                'inmueble_operacion': _publishOp,
-                'inmueble_zona': _place.text,
-                'inmueble_recamaras': _rooms,
-                'inmueble_banos': _publishBaths,
-                'inmueble_m2': _amount(_meters.text),
-                'inmueble_disponible': _availableWhen,
-                'inmueble_precio': _amount(_price.text),
-              },
-              if (_reason == 'otro') 'asunto': _subject,
-            },
+            payload: _payload,
           );
       if (!mounted) return;
       ref.invalidate(appointmentsProvider);
@@ -248,9 +306,13 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
       _reason = house.operation == 'venta' ? 'comprar' : 'rentar';
     }
     final slug = house == null ? null : widget.slug;
+    final editing = widget.editing != null;
+    // Con una casa elegida la zona ya se conoce
+    final hasHouse = house != null || widget.editing?.propertyName != null;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.welcome ? 'Bienvenido a Homiz' : 'Nueva solicitud')),
+      appBar: AppBar(title: Text(editing ? 'Editar mi información' : widget.welcome ? 'Bienvenido a Homiz' : 'Nueva solicitud')),
       body: Form(
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         key: _form,
         // Columna y no ListView: la lista no construye lo que está fuera de pantalla y esos campos no se validarían
         child: SingleChildScrollView(
@@ -258,7 +320,7 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('¿Qué quieres hacer?', style: AppTextStyles.pageTitle),
+              Text(editing ? 'Corrige lo que mandaste' : '¿Qué quieres hacer?', style: AppTextStyles.pageTitle),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Cuéntanos qué buscas y tu asesor te propondrá propiedades aquí en la app. Tus datos de contacto ya los tenemos de tu cuenta.',
@@ -270,7 +332,7 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                 runSpacing: AppSpacing.sm,
                 children: [
                   for (final (v, label) in const [('rentar', 'Rentar'), ('comprar', 'Comprar'), ('publicar', 'Publicar mi propiedad'), ('otro', 'Otro')])
-                    ChoiceChip(label: Text(label), selected: _reason == v, onSelected: _loading ? null : (_) => setState(() => _reason = v)),
+                    ChoiceChip(label: Text(label), selected: _reason == v, onSelected: _loading || (editing && _reason != v) ? null : (_) => setState(() => _reason = v)),
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -316,8 +378,8 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                   controller: _place,
                   maxLength: 80,
                   textCapitalization: TextCapitalization.words,
-                  decoration: InputDecoration(labelText: house != null ? 'Otra zona de preferencia (opcional)' : 'Zona de preferencia', hintText: 'Colonia, ciudad o país'),
-                  validator: (v) => house == null && (v ?? '').trim().length < 2 ? 'Escribe la zona que buscas.' : null,
+                  decoration: InputDecoration(labelText: hasHouse ? 'Otra zona de preferencia (opcional)' : 'Zona de preferencia', hintText: 'Colonia, ciudad o país'),
+                  validator: (v) => Validators.text(v, min: 2, max: 80, empty: hasHouse ? null : 'Escribe la zona que buscas.'),
                 ),
                 Text(_reason == 'comprar' ? 'Presupuesto (MXN)' : 'Presupuesto al mes (MXN)', style: AppTextStyles.label),
                 const SizedBox(height: 2),
@@ -332,7 +394,8 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                         maxLength: 12,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: const InputDecoration(labelText: 'Mínimo', prefixText: r'$ ', counterText: '', helperText: 'Opcional'),
+                        decoration: const InputDecoration(labelText: 'Mínimo', prefixText: r'$ ', counterText: '', helperText: 'Opcional', errorMaxLines: 3),
+                        validator: (v) => Validators.budgetMin(v, sale: _reason == 'comprar'),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
@@ -342,13 +405,8 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                         maxLength: 12,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: const InputDecoration(labelText: 'Máximo (tu límite)', prefixText: r'$ ', counterText: ''),
-                        validator: (v) {
-                          final max = _amount(v ?? ''), min = _amount(_min.text);
-                          if (max == null || max <= 0) return 'Escribe tu presupuesto máximo.';
-                          if (min != null && min > max) return 'El mínimo es mayor.';
-                          return null;
-                        },
+                        decoration: const InputDecoration(labelText: 'Máximo (tu límite)', prefixText: r'$ ', counterText: '', errorMaxLines: 3),
+                        validator: (v) => Validators.budget(v, minText: _min.text, sale: _reason == 'comprar'),
                       ),
                     ),
                   ],
@@ -370,7 +428,7 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                     controller: _petsDetail,
                     maxLength: 120,
                     decoration: const InputDecoration(labelText: '¿Cuáles y cuántas?', hintText: 'Por ejemplo: 1 perro pequeño'),
-                    validator: (v) => _pets && (v ?? '').trim().isEmpty ? 'Cuéntanos qué mascotas tienes.' : null,
+                    validator: (v) => _pets ? Validators.text(v, min: 3, max: 120, empty: 'Cuéntanos qué mascotas tienes.') : null,
                   ),
                 const SizedBox(height: AppSpacing.sm),
                 _optional('¿Cuándo te gustaría mudarte?', _moveIn, _moveInWhen, (v) => setState(() => _moveInWhen = v)),
@@ -380,17 +438,17 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                   _section('Sobre ti'),
                   TextFormField(
                     controller: _nationality,
-                    maxLength: 60,
+                    maxLength: 40,
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(labelText: 'Nacionalidad', hintText: 'Mexicana'),
-                    validator: (v) => (v ?? '').trim().length < 3 ? 'Escribe tu nacionalidad.' : null,
+                    validator: (v) => Validators.words(v, min: 3, max: 40, empty: 'Escribe tu nacionalidad.'),
                   ),
                   TextFormField(
                     controller: _job,
                     maxLength: 80,
                     textCapitalization: TextCapitalization.sentences,
                     decoration: const InputDecoration(labelText: '¿En qué trabajas?'),
-                    validator: (v) => (v ?? '').trim().length < 3 ? 'Cuéntanos en qué trabajas.' : null,
+                    validator: (v) => Validators.text(v, min: 3, max: 80, empty: 'Cuéntanos en qué trabajas.'),
                   ),
                 ],
               ],
@@ -404,7 +462,7 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                   maxLength: 80,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(labelText: 'Colonia o residencial'),
-                  validator: (v) => (v ?? '').trim().length < 2 ? 'Escribe dónde está.' : null,
+                  validator: (v) => Validators.text(v, min: 2, max: 80, empty: 'Escribe dónde está.'),
                 ),
                 _choice('Recámaras', const [('0', '0'), ('1', '1'), ('2', '2'), ('3', '3'), ('4', '4+')], _rooms, (v) => setState(() => _rooms = v)),
                 _choice('Baños', const [('1', '1'), ('2', '2'), ('3', '3+')], _publishBaths, (v) => setState(() => _publishBaths = v)),
@@ -414,6 +472,7 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(labelText: 'Metros cuadrados (opcional)', counterText: '', suffixText: 'm²'),
+                  validator: (v) => Validators.amount(v, min: 10, max: 100000, unit: 'm²'),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 _optional('¿Cuándo está disponible?', _available, _availableWhen, (v) => setState(() => _availableWhen = v)),
@@ -423,6 +482,7 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(labelText: 'Precio esperado (opcional)', prefixText: r'$ ', counterText: ''),
+                  validator: (v) => Validators.amount(v, min: 1000, max: 999999999, unit: 'MXN'),
                 ),
               ],
               _section('Tu mensaje'),
@@ -438,7 +498,7 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                   hintText: _reason == 'publicar' ? 'Estado de la propiedad, cuándo está disponible…' : 'Por ejemplo: cerca de escuelas, con jardín…',
                   alignLabelWithHint: true,
                 ),
-                validator: (v) => _reason == 'otro' && (v ?? '').trim().length < 5 ? 'Cuéntanos en qué te ayudamos.' : null,
+                validator: (v) => Validators.text(v, min: 10, max: 2000, empty: _reason == 'otro' ? 'Cuéntanos en qué te ayudamos.' : null),
               ),
               const SizedBox(height: AppSpacing.lg),
               if (_error != null)
@@ -446,7 +506,7 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                   padding: const EdgeInsets.only(bottom: AppSpacing.md),
                   child: Semantics(liveRegion: true, child: Text(_error!, style: AppTextStyles.secondary.copyWith(color: AppColors.danger, fontSize: 13))),
                 ),
-              PrimaryButton(label: slug != null && _looking && _visit ? 'Enviar y pedir mi cita' : 'Enviar solicitud', loading: _loading, onPressed: () => _submit(slug)),
+              PrimaryButton(label: editing ? 'Guardar cambios' : slug != null && _looking && _visit ? 'Enviar y pedir mi cita' : 'Enviar solicitud', loading: _loading, onPressed: () => _submit(slug)),
               if (widget.welcome) ...[
                 const SizedBox(height: AppSpacing.sm),
                 TextButton(onPressed: _loading ? null : () => context.go('/home'), child: const Text('Ahora no, ver la app')),

@@ -13,11 +13,13 @@ import '../common/cards.dart';
 import '../common/confirm_dialog.dart';
 import '../common/contact_actions.dart';
 import '../common/permission_gate.dart';
+import '../../services/providers/session_provider.dart';
 import '../common/primary_button.dart';
 import '../../services/repositories/documents_repository.dart';
 import '../../services/repositories/payments_repository.dart';
 import '../../models/appointment.dart';
 import '../../services/providers/appointments_provider.dart';
+import '../common/visit_time.dart';
 
 /// Datos del cliente de la cita (solo personal) con Llamar / Correo.
 class AppointmentClientCard extends StatelessWidget {
@@ -207,7 +209,8 @@ class _TenantSheetState extends ConsumerState<TenantSheet> {
     final picked = await showDatePicker(
       context: context,
       initialDate: start ? _start : _end,
-      firstDate: DateTime.now().subtract(const Duration(days: 60)),
+      // Las fechas que ya pasaron no se pueden elegir (igual que en las citas)
+      firstDate: DateUtils.dateOnly(DateTime.now()),
       lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
       helpText: start ? 'Inicio del contrato' : 'Fin del contrato',
     );
@@ -218,6 +221,7 @@ class _TenantSheetState extends ConsumerState<TenantSheet> {
   Widget build(BuildContext context) {
     final a = widget.appointment;
     return Form(
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       key: _form,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -346,7 +350,7 @@ class _StaffAppointmentActionsState extends ConsumerState<StaffAppointmentAction
       helpText: 'Nuevo día de la visita',
     );
     if (day == null || !mounted) return;
-    final time = await showTimePicker(initialEntryMode: TimePickerEntryMode.input, context: context, initialTime: TimeOfDay.fromDateTime(a.scheduledAt), helpText: 'Nueva hora');
+    final time = await pickVisitTime(context, initial: TimeOfDay.fromDateTime(a.scheduledAt));
     if (time == null || !mounted) return;
     final when = DateTime(day.year, day.month, day.day, time.hour, time.minute);
     final ok = await showConfirmDialog(
@@ -400,10 +404,9 @@ class _StaffAppointmentActionsState extends ConsumerState<StaffAppointmentAction
     final pending = a.status == 'por-confirmar';
     final confirmed = a.status == 'confirmada';
     if (a.status == 'realizada' && a.client != null) {
-      return PermissionGate(
-        permission: 'contracts.manage',
-        child: PrimaryButton(label: 'Rentarle esta casa (inquilino)', icon: Icons.key_outlined, onPressed: _rent),
-      );
+      // Rentar lo decide el dueño; administración solo da seguimiento a la casa ya rentada
+      final owner = ref.watch(sessionProvider.select((s) => s.value?.isOwner ?? false));
+      return owner ? PrimaryButton(label: 'Rentarle esta casa (inquilino)', icon: Icons.key_outlined, onPressed: _rent) : const SizedBox.shrink();
     }
     if (!pending && !confirmed) return const SizedBox.shrink();
     final disabled = _busy != null;

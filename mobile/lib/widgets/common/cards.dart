@@ -173,16 +173,33 @@ class DashboardCard extends StatelessWidget {
 
 /// Fila clave/valor con separador (Nombre, Presupuesto, Mascotas…).
 class KeyValueRow extends StatelessWidget {
-  const KeyValueRow({super.key, required this.label, required this.value, this.showDivider = true});
+  const KeyValueRow({super.key, required this.label, required this.value, this.showDivider = true, this.stacked = false});
 
   final String label;
   final String value;
   final bool showDivider;
 
+  /// La etiqueta arriba y el valor abajo, alineados a la izquierda (para respuestas largas de un formulario).
+  final bool stacked;
+
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: stacked ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
+        if (stacked)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: AppTextStyles.secondary.copyWith(fontSize: 13)),
+                const SizedBox(height: 2),
+                Text(value, style: AppTextStyles.cardTitle),
+              ],
+            ),
+          )
+        else
         Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
           child: Row(

@@ -123,6 +123,7 @@ class _EditMyDataSheetState extends ConsumerState<_EditMyDataSheet> {
   @override
   Widget build(BuildContext context) {
     return Form(
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       key: _form,
       child: Column(
         mainAxisSize: MainAxisSize.min,

@@ -37,7 +37,7 @@ class PaymentsRepository {
       });
 
   Future<List<Receipt>> receipts({String? propertyId}) => apiCall(() async {
-        final res = await _dio.get<Map<String, dynamic>>('/receipts', queryParameters: {'limit': 100, 'propertyId': ?propertyId});
+        final res = await _dio.get<Map<String, dynamic>>('/receipts', queryParameters: {'limit': 100, 'propertyId': ?propertyId, 'pagares': '1'});
         return dataList(res.data, Receipt.fromJson);
       });
 

@@ -1,9 +1,6 @@
 import 'package:dio/dio.dart';
-
 import '../utils/formatters.dart';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../network/api_call.dart';
 import '../network/api_client.dart';
 import '../../models/request_models.dart';
@@ -69,9 +66,23 @@ class RequestsRepository {
     return LeadRequest.fromJson(res.data!);
   });
 
+  /// El cliente corrige lo que mandó; lo que deje vacío se borra.
+  Future<void> edit(String id, {String? message, required Map<String, Object?> payload}) => apiCall(() async {
+    await _dio.patch<Map<String, dynamic>>(
+      '/requests/$id',
+      data: {
+        'message': (message ?? '').trim().isEmpty ? null : message!.trim(),
+        'payload': {
+          for (final e in payload.entries)
+            if (e.value is num) e.key: e.value else if (e.value is String && (e.value! as String).trim().isNotEmpty) e.key: (e.value! as String).trim(),
+        },
+      },
+    );
+  });
+
   /* ---------- Personal (leads.manage): contestar y proponer casas ---------- */
 
-  /// [status] "sin_asignar" = las que aún no tienen broker (solo administración).
+  /// [status] "sin_asignar" = las que aún no tienen broker.
   Future<List<LeadRequest>> staffList({String? status}) => apiCall(() async {
     final res = await _dio.get<Map<String, dynamic>>('/leads', queryParameters: {'limit': 100, if (status == 'sin_asignar') 'unassigned': 'true' else 'status': ?status});
     return dataList(res.data, LeadRequest.fromJson);
@@ -95,12 +106,18 @@ class RequestsRepository {
   });
 
   /// Agenda la visita desde la solicitud; devuelve la clave de la cita (CIT-…).
-  Future<String> schedule(String id, {required String propertyId, required DateTime at, String? note}) => apiCall(() async {
+  /// Con [agreed], el personal acepta la fecha y hora que pidió la persona y la cita queda confirmada.
+  Future<String> schedule(String id, {required String propertyId, required DateTime at, String? note, bool agreed = false}) => apiCall(() async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/leads/$id/appointment',
-      data: {'propertyId': propertyId, 'scheduledAt': cancunIso(at), if (note != null && note.trim().isNotEmpty) 'note': note.trim()},
+      data: {'propertyId': propertyId, 'scheduledAt': cancunIso(at), if (note != null && note.trim().isNotEmpty) 'note': note.trim(), if (agreed) 'agreed': true},
     );
     return (res.data!['appointment'] as Map<String, dynamic>)['code'] as String;
+  });
+
+  /// El broker toma una solicitud sin broker: se queda con su seguimiento.
+  Future<void> take(String id) => apiCall(() async {
+    await _dio.post<Map<String, dynamic>>('/leads/$id/take');
   });
 
   /// Solo administración: asigna el broker; la cita (si hay) se va con él y los datos de la persona no cambian.

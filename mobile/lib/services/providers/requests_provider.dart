@@ -62,17 +62,30 @@ class RequestActions {
     return r;
   }
 
+  Future<void> edit(String id, {String? message, required Map<String, Object?> payload}) async {
+    await _after(id, _repo.edit(id, message: message, payload: payload));
+    // La cita muestra lo mismo que la solicitud
+    _ref.invalidate(appointmentProvider);
+    _ref.invalidate(appointmentsProvider);
+  }
+
   Future<void> respond(String id, String response) => _after(id, _repo.update(id, response: response));
   Future<void> setStatus(String id, String status) => _after(id, _repo.update(id, status: status));
   Future<void> propose(String id, String propertyId, {String? note}) => _after(id, _repo.propose(id, propertyId, note: note));
   Future<void> unpropose(String id, String proposalId) => _after(id, _repo.unpropose(id, proposalId));
 
   /// Agenda la visita desde la solicitud: la cita aparece en «Citas» como por confirmar.
-  Future<String> schedule(String id, {required String propertyId, required DateTime at, String? note}) async {
-    final code = await _repo.schedule(id, propertyId: propertyId, at: at, note: note);
+  Future<String> schedule(String id, {required String propertyId, required DateTime at, String? note, bool agreed = false}) async {
+    final code = await _repo.schedule(id, propertyId: propertyId, at: at, note: note, agreed: agreed);
     await _after(id, Future.value());
     _ref.invalidate(appointmentsProvider);
     return code;
+  }
+
+  /// El broker toma la solicitud: su cita, si hay, pasa a él.
+  Future<void> take(String id) async {
+    await _after(id, _repo.take(id));
+    _ref.invalidate(appointmentsProvider);
   }
 
   /// Solo administración: asigna el broker (la cita, si hay, pasa a él).

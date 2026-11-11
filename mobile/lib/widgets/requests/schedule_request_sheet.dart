@@ -9,12 +9,7 @@ import '../common/primary_button.dart';
 import '../../services/providers/property_provider.dart';
 import '../../services/repositories/requests_repository.dart';
 import '../../services/providers/requests_provider.dart';
-
-/// Horarios de visita (los mismos del panel).
-/// Todo el día en bloques de 15 minutos (valor de 24 h, 00:00 a 23:45; se elige de 1 a 12 con a.m./p.m.): la visita dura 15 min
-final visitTimes = [
-  for (var m = 0; m < 24 * 60; m += 15) '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}',
-];
+import '../common/visit_time.dart';
 
 /// Abre la hoja «Agendar cita» y devuelve la clave de la cita creada (o null si se cierra).
 Future<String?> showScheduleRequestSheet(BuildContext context, LeadRequest request) => showModalBottomSheet<String>(
@@ -46,6 +41,11 @@ class _ScheduleRequestSheetState extends ConsumerState<ScheduleRequestSheet> {
   String? _error;
   bool _saving = false;
 
+  /// Casas que aceptan visitas: una rentada o vendida no se ofrece.
+  Set<String> _free = const {};
+
+  static bool _visitable(String? status) => status != 'borrador' && status != 'rentada' && status != 'vendida';
+
   LeadRequest get r => widget.request;
 
   /// Cita vigente de la solicitud: se reprograma esa misma (no se crea otra)
@@ -75,19 +75,10 @@ class _ScheduleRequestSheetState extends ConsumerState<ScheduleRequestSheet> {
     super.dispose();
   }
 
-  /// `_time` se guarda en 24 h («15:30», lo que manda la API); en pantalla se elige de 1 a 12 con a.m./p.m.
-  int? get _hour12 {
-    final h = int.tryParse(_time?.substring(0, 2) ?? '');
-    return h == null ? null : (h % 12 == 0 ? 12 : h % 12);
-  }
-
-  bool get _pm => (int.tryParse(_time?.substring(0, 2) ?? '') ?? 9) >= 12;
-
-  void _setTime({int? hour12, String? minutes, bool? pm}) {
-    final h12 = hour12 ?? _hour12 ?? 9;
-    final isPm = pm ?? _pm;
-    final h = (h12 % 12) + (isPm ? 12 : 0);
-    setState(() => _time = '${h.toString().padLeft(2, '0')}:${minutes ?? _time?.substring(3) ?? '00'}');
+  Future<void> _pickTime() async {
+    final p = _time?.split(':');
+    final picked = await pickVisitTime(context, initial: p == null ? null : TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1])));
+    if (picked != null) setState(() => _time = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}');
   }
 
   Future<void> _pickDay() async {
@@ -103,7 +94,7 @@ class _ScheduleRequestSheetState extends ConsumerState<ScheduleRequestSheet> {
   }
 
   Future<void> _save() async {
-    if (_house == null || _day == null || _time == null) {
+    if (_house == null || !_free.contains(_house) || _day == null || _time == null) {
       return setState(() => _error = 'Elige la casa, el día y el horario.');
     }
     final parts = _time!.split(':');
@@ -125,10 +116,14 @@ class _ScheduleRequestSheetState extends ConsumerState<ScheduleRequestSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final inventory = ref.watch(inventoryProvider(''));
+    final inventory = ref.watch(allHousesProvider);
     final suggested = _suggested;
-    final houses = [...(inventory.value ?? const []).where((h) => h.status != 'borrador')]
+    final all = inventory.value ?? const [];
+    final houses = [...all.where((h) => _visitable(h.status))]
       ..sort((a, b) => (suggested.contains(b.id) ? 1 : 0) - (suggested.contains(a.id) ? 1 : 0));
+    _free = houses.map((h) => h.id).toSet();
+    // La casa de la solicitud ya se rentó o se vendió: hay que elegir otra
+    final gone = r.propertyId != null && all.any((h) => h.id == r.propertyId && !_visitable(h.status));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -137,16 +132,20 @@ class _ScheduleRequestSheetState extends ConsumerState<ScheduleRequestSheet> {
         Text(
           _active == null
               ? 'Para ${r.name ?? 'la persona'} · visita de 15 minutos. Queda por confirmar y le avisamos en la app.'
-              : 'Ya tiene la cita ${_active!.code} (${_active!.propertyName}). Elige el nuevo día y horario: se mueve esa misma cita. Si eliges otra casa, se agenda una aparte.',
+              : 'Ya tiene la cita ${_active!.code} (${_active!.propertyName}). Elige el nuevo día y horario: se mueve esa misma cita.',
           style: AppTextStyles.secondary,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: AppSpacing.lg),
+        if (gone) ...[
+          Text('${r.propertyName ?? 'La casa que pidió'} ya no está disponible. Elige otra casa para la visita.', style: AppTextStyles.secondary.copyWith(color: Theme.of(context).colorScheme.error), textAlign: TextAlign.center),
+          const SizedBox(height: AppSpacing.md),
+        ],
         if (inventory.isLoading && inventory.value == null)
           const Center(child: CircularProgressIndicator())
         else
           DropdownButtonFormField<String>(
-            initialValue: houses.any((h) => h.id == _house) ? _house : null,
+            initialValue: _free.contains(_house) ? _house : null,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Casa', helperText: '★ = la que pidió o las que le propusiste'),
             items: [
@@ -162,39 +161,10 @@ class _ScheduleRequestSheetState extends ConsumerState<ScheduleRequestSheet> {
           label: Text(_day == null ? 'Elegir día' : Fmt.dayMonthShort(_day!)),
         ),
         const SizedBox(height: AppSpacing.md),
-        // Cualquier hora del día: hora de 1 a 12, minutos (:00, :15, :30, :45) y a.m./p.m.
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<int>(
-                isExpanded: true,
-                initialValue: _hour12,
-                decoration: const InputDecoration(labelText: 'Hora'),
-                items: [for (var h = 1; h <= 12; h++) DropdownMenuItem(value: h, child: Text('$h'))],
-                onChanged: (h) => _setTime(hour12: h),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: _time?.substring(3),
-                decoration: const InputDecoration(labelText: 'Minutos'),
-                items: [for (final m in const ['00', '15', '30', '45']) DropdownMenuItem(value: m, child: Text(':$m'))],
-                onChanged: (m) => _setTime(minutes: m),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: DropdownButtonFormField<bool>(
-                isExpanded: true,
-                initialValue: _pm,
-                decoration: const InputDecoration(labelText: 'a.m./p.m.'),
-                items: const [DropdownMenuItem(value: false, child: Text('a.m.')), DropdownMenuItem(value: true, child: Text('p.m.'))],
-                onChanged: (pm) => _setTime(pm: pm),
-              ),
-            ),
-          ],
+        OutlinedButton.icon(
+          onPressed: _pickTime,
+          icon: const Icon(Icons.schedule_outlined),
+          label: Text(_time == null ? 'Elegir hora' : Fmt.hhmm(_time!)),
         ),
         const SizedBox(height: AppSpacing.md),
         TextField(controller: _note, minLines: 1, maxLines: 3, maxLength: 500, decoration: const InputDecoration(labelText: 'Nota para la visita (opcional)')),

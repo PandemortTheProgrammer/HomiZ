@@ -8,17 +8,18 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../providers/appointments_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/dashboard_provider.dart';
+import '../providers/maintenance_provider.dart';
 import '../providers/notifications_provider.dart';
+import '../providers/payments_provider.dart';
 import '../providers/property_provider.dart';
 import '../providers/requests_provider.dart';
 import '../network/api_client.dart';
-import '../utils/env.dart';
 
 /// Respaldo cuando el WebSocket no conecta: cada cuánto se pregunta si hubo cambios (solo un número).
 const livePollInterval = Duration(seconds: 6);
 
 /// En las pruebas se apaga el WebSocket (no hay servidor) y queda la consulta periódica.
-final liveSocketEnabledProvider = Provider<bool>((ref) => !Env.demo);
+final liveSocketEnabledProvider = Provider<bool>((ref) => true);
 
 /// http(s)://host/api/v1 → ws(s)://host/api/v1/ws?token=… (si la API es relativa, con el dominio de la app web)
 Uri liveSocketUri(String apiBase, String token) {
@@ -27,7 +28,7 @@ Uri liveSocketUri(String apiBase, String token) {
   return api.replace(scheme: api.scheme == 'https' ? 'wss' : 'ws', path: '$path/ws', queryParameters: {'token': token});
 }
 
-/// Tiempo real: la API avisa por WebSocket cada cambio (citas, solicitudes, mensajes, avisos)
+/// Tiempo real: la API avisa por WebSocket cada cambio (citas, solicitudes, pagos, mensajes, avisos)
 /// hecho en la app, el panel o el sitio; la app vuelve a cargar lo que se ve en pantalla al instante.
 /// Si el WebSocket no conecta (red que lo bloquea), pregunta el contador cada [livePollInterval].
 final liveUpdatesProvider = Provider<void>((ref) {
@@ -100,9 +101,21 @@ final liveUpdatesProvider = Provider<void>((ref) {
     retry = Timer(Duration(seconds: min(30, 1 << min(attempts, 5))), connect);
   };
 
+  // Solicitudes y citas se cargan desde el inicio: por una conexión lenta, abrirlas ya no hace esperar
+  if (useSocket) {
+    final user = ref.read(sessionProvider).value;
+    if (user != null) {
+      ref.read(requestsProvider(user.isStaff ? 'sin_asignar' : null).future).ignore();
+      ref.read(appointmentsProvider.future).ignore();
+    }
+  }
+
   connect();
+  // Con WebSocket también se revisa de vez en cuando: un túnel puede dejarlo «abierto» sin que llegue nada
+  var ticks = 0;
   final poll = Timer.periodic(livePollInterval, (_) {
-    if (channel == null) ask();
+    ticks++;
+    if (channel == null || ticks % 3 == 0) ask();
   });
   ref.onDispose(() {
     disposed = true;
@@ -126,7 +139,16 @@ void _refresh(Ref ref) {
     ..invalidate(requestMessagesProvider)
     ..invalidate(staffDashboardProvider)
     ..invalidate(clientDashboardProvider)
+    ..invalidate(notesProvider)
+    ..invalidate(overdueNotesProvider)
+    ..invalidate(allNotesProvider)
+    ..invalidate(receiptsProvider)
     ..invalidate(dossierProvider)
-    ..invalidate(propertyDetailProvider);
-
+    ..invalidate(propertyDetailProvider)
+    ..invalidate(inventoryProvider)
+    ..invalidate(allHousesProvider)
+    ..invalidate(catalogProvider)
+    ..invalidate(newReportsProvider)
+    ..invalidate(maintenanceReportsProvider)
+    ..invalidate(maintenanceReportProvider);
 }

@@ -40,6 +40,9 @@ abstract class PropertyDetail with _$PropertyDetail {
 
   /// Primera foto con URL (las del sitio aún no tienen archivo: se muestra el recuadro gris).
   String? get coverUrl => photos.where((p) => p.url != null).firstOrNull?.url;
+
+  /// Fotos con archivo, en orden: la primera es la portada.
+  List<String> get photoUrls => [for (final p in photos) if (p.url != null) p.url!];
 }
 
 @freezed

@@ -77,6 +77,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       body: AuthBackground(
         child: AutofillGroup(
           child: Form(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             key: _form,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -105,6 +106,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   label: 'Nombre completo',
                   controller: _name,
                   autofillHints: const [AutofillHints.name],
+                  inputFormatters: [LengthLimitingTextInputFormatter(80)],
                   validator: Validators.name,
                   errorText: _fieldErrors['name'],
                   enabled: !_loading,
@@ -127,7 +129,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   hint: '998 123 4567',
                   keyboardType: TextInputType.phone,
                   autofillHints: const [AutofillHints.telephoneNumber],
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d\s+()-]')), LengthLimitingTextInputFormatter(20)],
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d\s+()-]')), LengthLimitingTextInputFormatter(17)],
                   validator: Validators.phone,
                   errorText: _fieldErrors['phone'],
                   enabled: !_loading,

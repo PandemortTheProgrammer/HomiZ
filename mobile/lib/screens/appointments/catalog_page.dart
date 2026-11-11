@@ -58,6 +58,14 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
                       showSelectedIcon: false,
                       onSelectionChanged: (s) => setState(() => _op = s.first),
                     ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: [
+                        Expanded(child: OutlinedButton(onPressed: () => context.push('/home/requests/new?motivo=publicar'), child: const Text('Publicar propiedad'))),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(child: OutlinedButton(onPressed: () => context.push('/home/requests/new?motivo=otro'), child: const Text('Otro motivo'))),
+                      ],
+                    ),
                   ],
                 );
               }

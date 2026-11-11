@@ -85,7 +85,7 @@ class RequestFormSections extends StatelessWidget {
               padding: const EdgeInsets.only(top: AppSpacing.md),
               child: Text(title.toUpperCase(), style: AppTextStyles.small.copyWith(color: AppColors.textMuted, letterSpacing: 0.6)),
             ),
-            for (final (i, (label, value)) in rows.indexed) KeyValueRow(label: label, value: value, showDivider: i < rows.length - 1),
+            for (final (i, (label, value)) in rows.indexed) KeyValueRow(label: label, value: value, showDivider: i < rows.length - 1, stacked: true),
           ],
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.md),

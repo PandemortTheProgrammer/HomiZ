@@ -15,12 +15,22 @@ import 'auth/register_page.dart';
 import 'auth/reset_password_page.dart';
 import 'auth/splash_page.dart';
 import 'home/home_page.dart';
+import 'maintenance/new_report_page.dart';
+import 'maintenance/new_reports_page.dart';
+import 'maintenance/report_detail_page.dart';
 import 'notifications/notifications_page.dart';
+import 'payments/overdue_notes_page.dart';
+import 'payments/staff_payments_page.dart';
 import 'profile/profile_page.dart';
+import 'property/property_page.dart';
+import 'property/staff_property_page.dart';
+import 'providers/providers_page.dart';
+import '../services/repositories/requests_repository.dart';
 import 'requests/new_request_page.dart';
 import 'requests/request_detail_page.dart';
 import 'requests/requests_page.dart';
 import '../services/providers/requests_provider.dart';
+import 'sales/purchases_page.dart';
 import '../services/live/live_updates.dart';
 import '../widgets/common/homiz_bottom_nav.dart';
 
@@ -28,6 +38,16 @@ const _authRoutes = {'/login', '/register', '/reset'};
 const _createPassword = '/create-password';
 
 int? _intParam(GoRouterState state, String name) => int.tryParse(state.uri.queryParameters[name] ?? '');
+
+/// Pantallas solo de administración: propiedades, pagos, pagarés, reportes y compras.
+/// Cliente y broker se enfocan en citas y solicitudes; el broker sí ve el directorio de proveedores.
+const _adminOnly = {'/home/overdue', '/home/payments', '/home/reports', '/home/purchases'};
+
+bool _blocked(String location, {required bool admin, required bool client}) {
+  if (admin) return false;
+  if (location == '/property' || location.startsWith('/property/') || _adminOnly.contains(location)) return true;
+  return client && location == '/home/providers';
+}
 
 /// Decide a dónde ir según la sesión. Pura para poder probarla sin widgets.
 /// [pendingVisit]: casa elegida en el sitio; sin sesión se pide crear cuenta y al entrar se abre su visita.
@@ -92,6 +112,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
       // Ya entró: el enlace del sitio o del correo no se vuelve a usar.
       if (target == '/home/requests') Future.microtask(ref.read(siteLinkProvider.notifier).clear);
+      // Un aviso o enlace a una pantalla que no le toca lo regresa a su inicio.
+      if (target == null && user != null && _blocked(state.matchedLocation, admin: user.isAdmin, client: user.isClient)) return '/home';
       return target;
     },
     routes: [
@@ -103,15 +125,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: _createPassword, builder: (_, _) => const CreatePasswordPage()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
       GoRoute(path: '/notifications', builder: (_, _) => const NotificationsPage()),
-      // Avisos de pagos, contratos o mantenimiento: esas pantallas no están en esta versión
-      GoRoute(
-        path: '/property',
-        redirect: (_, _) => '/home',
-        routes: [
-          GoRoute(path: 'maintenance/:id', redirect: (_, _) => '/home'),
-          GoRoute(path: ':id', redirect: (_, _) => '/home'),
-        ],
-      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _TabsShell(shell: shell),
         branches: [
@@ -120,13 +133,37 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: '/home',
               builder: (_, _) => const HomePage(),
               routes: [
+                // Personal: listas de pendientes y directorio.
+                GoRoute(path: 'overdue', builder: (_, _) => const OverdueNotesPage()),
+                GoRoute(path: 'payments', builder: (_, _) => const StaffPaymentsPage()),
+                GoRoute(path: 'reports', builder: (_, _) => const NewReportsPage()),
+                GoRoute(path: 'providers', builder: (_, _) => const ProvidersPage()),
+                // Cliente: comprobantes de las casas que compró con nosotros
+                GoRoute(path: 'purchases', builder: (_, _) => const PurchasesPage()),
                 // Solicitudes: cliente «Mis solicitudes» y «Busco casa»; personal, las del sitio y la app.
                 GoRoute(path: 'requests', builder: (_, _) => const RequestsPage()),
                 GoRoute(
                   path: 'requests/new',
-                  builder: (_, state) => NewRequestPage(slug: state.uri.queryParameters['casa'], welcome: state.uri.queryParameters['bienvenida'] == '1'),
+                  builder: (_, state) => NewRequestPage(
+                    slug: state.uri.queryParameters['casa'],
+                    welcome: state.uri.queryParameters['bienvenida'] == '1',
+                    reason: state.uri.queryParameters['motivo'],
+                    editing: state.extra is LeadRequest ? state.extra! as LeadRequest : null,
+                  ),
                 ),
                 GoRoute(path: 'requests/:id', builder: (_, state) => RequestDetailPage(requestId: state.pathParameters['id']!)),
+              ],
+            ),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/property',
+              builder: (_, state) => PropertyPage(initialTab: _intParam(state, 'tab')),
+              routes: [
+                GoRoute(path: 'maintenance/new', builder: (_, state) => NewReportPage(propertyId: state.uri.queryParameters['propertyId'] ?? '')),
+                GoRoute(path: 'maintenance/:id', builder: (_, state) => ReportDetailPage(reportId: state.pathParameters['id']!)),
+                // Personal: ficha de una casa del inventario.
+                GoRoute(path: ':id', builder: (_, state) => StaffPropertyPage(propertyId: state.pathParameters['id']!, initialTab: _intParam(state, 'tab'))),
               ],
             ),
           ]),
@@ -169,7 +206,7 @@ class _TabsShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Tiempo real mientras se usa la app (avisos, citas y solicitudes se actualizan solos)
+    // Tiempo real mientras se usa la app (avisos, citas, solicitudes y pagos se actualizan solos)
     ref.watch(liveUpdatesProvider);
     final user = ref.watch(sessionProvider).value;
     // Solicitudes como pestaña propia para quien las atiende (brokers y administración)
@@ -181,6 +218,8 @@ class _TabsShell extends ConsumerWidget {
         currentIndex: shell.currentIndex,
         showRequests: showRequests,
         newRequests: newRequests,
+        staff: user?.isStaff ?? false,
+        showProperty: user?.isAdmin ?? false,
         // Tocar la pestaña activa regresa a su inicio.
         onTap: (i) => shell.goBranch(i, initialLocation: i == shell.currentIndex),
       ),

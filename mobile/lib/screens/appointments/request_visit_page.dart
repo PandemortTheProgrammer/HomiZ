@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../services/utils/validators.dart';
 import '../../services/network/api_exception.dart';
 import '../../widgets/theme/app_colors.dart';
 import '../../widgets/theme/app_spacing.dart';
@@ -16,6 +17,7 @@ import '../../widgets/property/property_widgets.dart';
 import '../../services/providers/requests_provider.dart';
 import '../../services/providers/appointments_provider.dart';
 import '../../services/providers/pending_visit_provider.dart';
+import '../../widgets/common/visit_time.dart';
 
 /// Ficha de una casa del catálogo con el formulario para solicitar visita.
 class RequestVisitPage extends ConsumerWidget {
@@ -129,16 +131,8 @@ class _VisitFormState extends ConsumerState<_VisitForm> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      initialEntryMode: TimePickerEntryMode.input,
-      context: context,
-      initialTime: _time ?? const TimeOfDay(hour: 11, minute: 0),
-      helpText: 'Elige la hora (bloques de 15 min)',
-    );
-    if (picked == null) return;
-    // La visita dura 15 minutos: se ajusta al bloque más cercano (:00, :15, :30, :45)
-    final total = ((picked.hour * 60 + picked.minute) / 15).round() * 15;
-    setState(() => _time = TimeOfDay(hour: (total ~/ 60) % 24, minute: total % 60));
+    final picked = await pickVisitTime(context, initial: _time);
+    if (picked != null) setState(() => _time = picked);
   }
 
   Future<void> _submit() async {
@@ -207,18 +201,32 @@ class _VisitFormState extends ConsumerState<_VisitForm> {
   @override
   Widget build(BuildContext context) {
     final p = widget.property;
+    // Rentada o vendida: ya tiene inquilino o dueño y no recibe visitas
+    if (p.status == 'rentada' || p.status == 'vendida') {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Text(
+            p.status == 'rentada' ? '${p.name} está rentada y tiene inquilino: no se pueden agendar visitas.' : '${p.name} ya se vendió: no se pueden agendar visitas.',
+            style: AppTextStyles.body,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     // Una cita a la vez: si ya tiene una, esta visita la cambia (no se crea otra)
     final active = ref.watch(activeAppointmentProvider).value;
     final sameHouse = active?.property.id == p.id;
     InputDecoration field(String label, {String? hint, String? helper}) => InputDecoration(labelText: label, hintText: hint, helperText: helper, helperMaxLines: 3);
-    String? required(String? v, String msg) => (v ?? '').trim().length < 2 ? msg : null;
     return Form(
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       key: _form,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(AppSpacing.screen, 0, AppSpacing.screen, AppSpacing.xxl),
         children: [
-          PropertyHero(
-            url: p.coverUrl,
+          PropertyGallery(
+            urls: p.photoUrls,
+            title: p.name,
             height: 210,
             overlay: HeroCaption(title: p.name, location: [p.zone, p.city].whereType<String>().join(', ')),
           ),
@@ -256,7 +264,7 @@ class _VisitFormState extends ConsumerState<_VisitForm> {
               _sale ? 'Presupuesto máximo' : 'Presupuesto máximo al mes',
               helper: 'Lo más que quieres pagar. Con este límite te presentamos también cualquier otra casa que no lo pase.',
             ).copyWith(prefixText: r'$ ', suffixText: 'MXN', counterText: ''),
-            validator: (v) => (int.tryParse(v ?? '') ?? 0) <= 0 ? 'Escribe tu presupuesto máximo.' : null,
+            validator: (v) => Validators.budget(v, sale: _sale),
           ),
           if (_sale) ...[
             const SizedBox(height: AppSpacing.md),
@@ -295,22 +303,22 @@ class _VisitFormState extends ConsumerState<_VisitForm> {
               controller: _petsDetail,
               maxLength: 200,
               decoration: field('¿Cuáles y cuántas?', hint: 'Por ejemplo: 1 perro pequeño'),
-              validator: (v) => _pets == true && (v ?? '').trim().isEmpty ? 'Cuéntanos qué mascotas tienes.' : null,
+              validator: (v) => _pets == true ? Validators.text(v, min: 3, max: 200, empty: 'Cuéntanos qué mascotas tienes.') : null,
             ),
           ],
           const SizedBox(height: AppSpacing.md),
           TextFormField(
             controller: _nationality,
-            maxLength: 60,
+            maxLength: 40,
             decoration: field('Nacionalidad', hint: 'Mexicana').copyWith(counterText: ''),
-            validator: (v) => required(v, 'Escribe tu nacionalidad.'),
+            validator: (v) => Validators.words(v, min: 3, max: 40, empty: 'Escribe tu nacionalidad.'),
           ),
           const SizedBox(height: AppSpacing.md),
           TextFormField(
             controller: _job,
             maxLength: 80,
             decoration: field('¿En qué trabajas?', hint: 'Por ejemplo: diseño de interiores').copyWith(counterText: ''),
-            validator: (v) => required(v, 'Cuéntanos en qué trabajas.'),
+            validator: (v) => Validators.text(v, min: 3, max: 80, empty: 'Cuéntanos en qué trabajas.'),
           ),
           const SizedBox(height: AppSpacing.lg),
           Text('Día y hora de la visita (15 minutos)', style: AppTextStyles.label),

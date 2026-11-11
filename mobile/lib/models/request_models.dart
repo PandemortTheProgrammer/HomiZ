@@ -48,13 +48,14 @@ class ProposedHouse {
 
 /// Cita agendada desde una solicitud (solo la ve el personal).
 class RequestAppointment {
-  const RequestAppointment({required this.id, required this.code, required this.scheduledAt, required this.status, this.propertyId, required this.propertyName, this.broker});
+  const RequestAppointment({required this.id, required this.code, required this.scheduledAt, required this.status, this.awaiting, this.propertyId, required this.propertyName, this.broker});
 
   factory RequestAppointment.fromJson(Map<String, dynamic> j) => RequestAppointment(
     id: j['id'] as String,
     code: j['code'] as String,
     scheduledAt: Fmt.parse(j['scheduledAt'] as String),
     status: j['status'] as String,
+    awaiting: j['awaiting'] as String?,
     propertyId: (j['property'] as Map<String, dynamic>?)?['id'] as String?,
     propertyName: (j['property'] as Map<String, dynamic>?)?['name'] as String? ?? '',
     broker: j['broker'] as String?,
@@ -64,6 +65,9 @@ class RequestAppointment {
   final String code;
   final DateTime scheduledAt;
   final String status;
+
+  /// Por confirmar: quién debe aceptar la fecha (`staff` o `client`).
+  final String? awaiting;
   final String? propertyId;
   final String propertyName;
 
@@ -98,6 +102,10 @@ class LeadRequest {
     this.others = const [],
     this.brokerId,
     this.brokerName,
+    this.priorityBrokerId,
+    this.priorityBrokerName,
+    this.priorityUntil,
+    this.overdue = false,
     required this.createdAt,
   });
 
@@ -138,8 +146,22 @@ class LeadRequest {
     others: [for (final o in (j['others'] as List? ?? const [])) LeadRequest.summaryFromJson(o as Map<String, dynamic>)],
     brokerId: (j['broker'] as Map<String, dynamic>?)?['id'] as String?,
     brokerName: (j['broker'] as Map<String, dynamic>?)?['name'] as String?,
+    priorityBrokerId: (j['priority'] as Map<String, dynamic>?)?['brokerId'] as String?,
+    priorityBrokerName: (j['priority'] as Map<String, dynamic>?)?['brokerName'] as String?,
+    priorityUntil: switch ((j['priority'] as Map<String, dynamic>?)?['until']) { final String u => Fmt.parse(u), _ => null },
+    overdue: j['overdue'] as bool? ?? false,
     createdAt: Fmt.parse(j['createdAt'] as String),
   );
+
+  /// Asesor de la casa que tiene la prioridad mientras nadie toma la solicitud.
+  final String? priorityBrokerId;
+  final String? priorityBrokerName;
+  final DateTime? priorityUntil;
+
+  /// Lleva demasiado tiempo sin que nadie la atienda.
+  final bool overdue;
+
+  String? get priorityLabel => priorityUntil == null ? null : 'Prioridad de $priorityBrokerName hasta las ${Fmt.time(priorityUntil!)}';
 
   final String id;
   final String folio;
