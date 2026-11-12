@@ -2,16 +2,52 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'appointments/appointment_detail_page.dart';
+import 'appointments/appointments_page.dart';
+import 'appointments/catalog_page.dart';
 import '../services/providers/pending_visit_provider.dart';
+import 'appointments/request_visit_page.dart';
 import '../services/providers/session_provider.dart';
+import 'auth/create_password_page.dart';
 import 'auth/login_page.dart';
 import '../services/providers/site_link_provider.dart';
+import 'auth/register_page.dart';
+import 'auth/reset_password_page.dart';
 import 'auth/splash_page.dart';
+import 'home/home_page.dart';
+import 'maintenance/new_report_page.dart';
+import 'maintenance/new_reports_page.dart';
+import 'maintenance/report_detail_page.dart';
+import 'notifications/notifications_page.dart';
+import 'payments/overdue_notes_page.dart';
+import 'payments/staff_payments_page.dart';
+import 'profile/profile_page.dart';
+import 'property/property_page.dart';
+import 'property/staff_property_page.dart';
+import 'providers/providers_page.dart';
+import '../services/repositories/requests_repository.dart';
+import 'requests/new_request_page.dart';
+import 'requests/request_detail_page.dart';
+import 'requests/requests_page.dart';
+import '../services/providers/requests_provider.dart';
+import 'sales/purchases_page.dart';
+import '../services/live/live_updates.dart';
 import '../widgets/common/homiz_bottom_nav.dart';
-import 'proximamente_page.dart';
 
 const _authRoutes = {'/login', '/register', '/reset'};
 const _createPassword = '/create-password';
+
+int? _intParam(GoRouterState state, String name) => int.tryParse(state.uri.queryParameters[name] ?? '');
+
+/// Pantallas solo de administración: propiedades, pagos, pagarés, reportes y compras.
+/// Cliente y broker se enfocan en citas y solicitudes; el broker sí ve el directorio de proveedores.
+const _adminOnly = {'/home/overdue', '/home/payments', '/home/reports', '/home/purchases'};
+
+bool _blocked(String location, {required bool admin, required bool client}) {
+  if (admin) return false;
+  if (location == '/property' || location.startsWith('/property/') || _adminOnly.contains(location)) return true;
+  return client && location == '/home/providers';
+}
 
 /// Decide a dónde ir según la sesión. Pura para poder probarla sin widgets.
 /// [pendingVisit]: casa elegida en el sitio; sin sesión se pide crear cuenta y al entrar se abre su visita.
@@ -76,55 +112,72 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
       // Ya entró: el enlace del sitio o del correo no se vuelve a usar.
       if (target == '/home/requests') Future.microtask(ref.read(siteLinkProvider.notifier).clear);
+      // Un aviso o enlace a una pantalla que no le toca lo regresa a su inicio.
+      if (target == null && user != null && _blocked(state.matchedLocation, admin: user.isAdmin, client: user.isClient)) return '/home';
       return target;
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
-      GoRoute(path: '/register', builder: (_, _) => const ProximamentePage(titulo: 'Registro')),
-      GoRoute(path: '/reset', builder: (_, _) => const ProximamentePage(titulo: 'Recuperar contraseña')),
+      GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
+      GoRoute(path: '/reset', builder: (_, _) => const ResetPasswordPage()),
       // Entró con la contraseña temporal del correo: crea la suya antes de seguir
-      GoRoute(path: _createPassword, builder: (_, _) => const ProximamentePage(titulo: 'Crear contraseña')),
-      GoRoute(path: '/profile', builder: (_, _) => const ProximamentePage(titulo: 'Perfil')),
-      GoRoute(path: '/notifications', builder: (_, _) => const ProximamentePage(titulo: 'Notificaciones')),
-      // Avisos de pagos, contratos o mantenimiento: esas pantallas no están en esta versión
-      GoRoute(
-        path: '/property',
-        redirect: (_, _) => '/home',
-        routes: [
-          GoRoute(path: 'maintenance/:id', redirect: (_, _) => '/home'),
-          GoRoute(path: ':id', redirect: (_, _) => '/home'),
-        ],
-      ),
+      GoRoute(path: _createPassword, builder: (_, _) => const CreatePasswordPage()),
+      GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
+      GoRoute(path: '/notifications', builder: (_, _) => const NotificationsPage()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _TabsShell(shell: shell),
         branches: [
           StatefulShellBranch(routes: [
             GoRoute(
               path: '/home',
-              builder: (_, _) => const ProximamentePage(titulo: 'Inicio'),
+              builder: (_, _) => const HomePage(),
               routes: [
+                // Personal: listas de pendientes y directorio.
+                GoRoute(path: 'overdue', builder: (_, _) => const OverdueNotesPage()),
+                GoRoute(path: 'payments', builder: (_, _) => const StaffPaymentsPage()),
+                GoRoute(path: 'reports', builder: (_, _) => const NewReportsPage()),
+                GoRoute(path: 'providers', builder: (_, _) => const ProvidersPage()),
+                // Cliente: comprobantes de las casas que compró con nosotros
+                GoRoute(path: 'purchases', builder: (_, _) => const PurchasesPage()),
                 // Solicitudes: cliente «Mis solicitudes» y «Busco casa»; personal, las del sitio y la app.
-                GoRoute(path: 'requests', builder: (_, _) => const ProximamentePage(titulo: 'Mis solicitudes')),
+                GoRoute(path: 'requests', builder: (_, _) => const RequestsPage()),
                 GoRoute(
                   path: 'requests/new',
-                  builder: (_, state) => const ProximamentePage(titulo: 'Nueva solicitud'),
+                  builder: (_, state) => NewRequestPage(
+                    slug: state.uri.queryParameters['casa'],
+                    welcome: state.uri.queryParameters['bienvenida'] == '1',
+                    reason: state.uri.queryParameters['motivo'],
+                    editing: state.extra is LeadRequest ? state.extra! as LeadRequest : null,
+                  ),
                 ),
-                GoRoute(path: 'requests/:id', builder: (_, state) => const ProximamentePage(titulo: 'Detalle de solicitud')),
+                GoRoute(path: 'requests/:id', builder: (_, state) => RequestDetailPage(requestId: state.pathParameters['id']!)),
+              ],
+            ),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/property',
+              builder: (_, state) => PropertyPage(initialTab: _intParam(state, 'tab')),
+              routes: [
+                GoRoute(path: 'maintenance/new', builder: (_, state) => NewReportPage(propertyId: state.uri.queryParameters['propertyId'] ?? '')),
+                GoRoute(path: 'maintenance/:id', builder: (_, state) => ReportDetailPage(reportId: state.pathParameters['id']!)),
+                // Personal: ficha de una casa del inventario.
+                GoRoute(path: ':id', builder: (_, state) => StaffPropertyPage(propertyId: state.pathParameters['id']!, initialTab: _intParam(state, 'tab'))),
               ],
             ),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(
               path: '/appointments',
-              builder: (_, state) => const ProximamentePage(titulo: 'Mis citas'),
+              builder: (_, state) => AppointmentsPage(initialFilter: _intParam(state, 'filter')),
               routes: [
                 // «catalog» va antes que «:id» para que no se tome como id de cita.
-                GoRoute(path: 'catalog', builder: (_, _) => const ProximamentePage(titulo: 'Catálogo')),
-                GoRoute(path: 'catalog/:propertyId', builder: (_, state) => const ProximamentePage(titulo: 'Solicitar visita')),
+                GoRoute(path: 'catalog', builder: (_, _) => const CatalogPage()),
+                GoRoute(path: 'catalog/:propertyId', builder: (_, state) => RequestVisitPage(propertyId: state.pathParameters['propertyId']!)),
                 // Casa elegida en el sitio de Zugar (por su slug).
-                GoRoute(path: 'visit/:slug', builder: (_, state) => const ProximamentePage(titulo: 'Solicitar visita')),
-                GoRoute(path: ':id', builder: (_, state) => const ProximamentePage(titulo: 'Detalle de cita')),
+                GoRoute(path: 'visit/:slug', builder: (_, state) => VisitFromSitePage(slug: state.pathParameters['slug']!)),
+                GoRoute(path: ':id', builder: (_, state) => AppointmentDetailPage(appointmentId: state.pathParameters['id']!)),
               ],
             ),
           ]),
@@ -132,9 +185,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [
             GoRoute(
               path: '/requests',
-              builder: (_, _) => const ProximamentePage(titulo: 'Mis solicitudes'),
+              builder: (_, _) => const RequestsPage(),
               routes: [
-                GoRoute(path: ':id', builder: (_, state) => const ProximamentePage(titulo: 'Detalle de solicitud')),
+                GoRoute(path: ':id', builder: (_, state) => RequestDetailPage(requestId: state.pathParameters['id']!)),
               ],
             ),
           ]),
@@ -153,16 +206,20 @@ class _TabsShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Tiempo real mientras se usa la app (avisos, citas, solicitudes y pagos se actualizan solos)
+    ref.watch(liveUpdatesProvider);
     final user = ref.watch(sessionProvider).value;
     // Solicitudes como pestaña propia para quien las atiende (brokers y administración)
     final showRequests = user != null && user.isStaff && user.can('leads.manage');
-    const newRequests = 0; // las solicitudes llegan en la Fase 6
+    final newRequests = showRequests ? ref.watch(requestsProvider('nuevo')).value?.length ?? 0 : 0;
     return Scaffold(
       body: shell,
       bottomNavigationBar: HomizBottomNav(
         currentIndex: shell.currentIndex,
         showRequests: showRequests,
         newRequests: newRequests,
+        staff: user?.isStaff ?? false,
+        showProperty: user?.isAdmin ?? false,
         // Tocar la pestaña activa regresa a su inicio.
         onTap: (i) => shell.goBranch(i, initialLocation: i == shell.currentIndex),
       ),

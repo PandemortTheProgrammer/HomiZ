@@ -91,6 +91,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       body: AuthBackground(
         child: AutofillGroup(
           child: Form(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             key: _form,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

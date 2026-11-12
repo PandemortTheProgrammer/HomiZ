@@ -1,0 +1,22 @@
+/// Tipos de inmueble (los mismos que el sitio y la API): (grupo, nombre).
+const propertyTypes = <(String, String)>[
+  ('Residencial', 'Casa'),
+  ('Residencial', 'Casa en condominio'),
+  ('Residencial', 'Townhouse'),
+  ('Residencial', 'Departamento'),
+  ('Residencial', 'Estudio'),
+  ('Residencial', 'Loft'),
+  ('Residencial', 'Penthouse'),
+  ('Residencial', 'Villa'),
+  ('Residencial', 'Cuarto'),
+  ('Comercial', 'Local comercial'),
+  ('Comercial', 'Oficina'),
+  ('Comercial', 'Consultorio'),
+  ('Comercial', 'Bodega'),
+  ('Comercial', 'Nave industrial'),
+  ('Comercial', 'Edificio'),
+  ('Comercial', 'Hotel'),
+  ('Terrenos', 'Terreno'),
+  ('Terrenos', 'Terreno comercial'),
+  ('Terrenos', 'Rancho o quinta'),
+];
