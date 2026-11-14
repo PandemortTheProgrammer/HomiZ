@@ -5,6 +5,7 @@ import * as Live from '../services/live.service.js';
 import { authRouter } from './auth.routes.js';
 import { usersRouter } from './users.routes.js';
 import { activityRouter } from './activity.routes.js';
+import { propertiesRouter } from './properties.routes.js';
 
 /* Rutas de la API v1 (detalle en docs/api.md). */
 export const apiRouter = Router();
@@ -16,4 +17,5 @@ apiRouter.get('/events/seq', authenticate, Live.current);
 apiRouter.use(Live.bumpOnWrite);
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/users', usersRouter);
+apiRouter.use('/properties', propertiesRouter);
 apiRouter.use('/activity-log', activityRouter);
