@@ -7,7 +7,9 @@ import { usersRouter } from './users.routes.js';
 import { activityRouter } from './activity.routes.js';
 import { publicRouter, leadsRouter, requestsRouter } from './public.routes.js';
 import { propertiesRouter } from './properties.routes.js';
+import { clientsRouter, contractsRouter } from './clients.routes.js';
 import { appointmentsRouter } from './appointments.routes.js';
+import { paymentsRouter } from './payments.routes.js';
 
 /* Rutas de la API v1 (detalle en docs/api.md). */
 export const apiRouter = Router();
@@ -23,5 +25,8 @@ apiRouter.use('/users', usersRouter);
 apiRouter.use('/properties', propertiesRouter);
 apiRouter.use('/leads', leadsRouter);
 apiRouter.use('/requests', requestsRouter);
+apiRouter.use('/clients', clientsRouter);
+apiRouter.use('/contracts', contractsRouter);
 apiRouter.use('/appointments', appointmentsRouter);
+apiRouter.use('/promissory-notes', paymentsRouter);
 apiRouter.use('/activity-log', activityRouter);
