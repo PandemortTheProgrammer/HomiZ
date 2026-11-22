@@ -8,6 +8,7 @@ import { activityRouter } from './activity.routes.js';
 import { publicRouter, leadsRouter, requestsRouter } from './public.routes.js';
 import { propertiesRouter } from './properties.routes.js';
 import { clientsRouter, contractsRouter } from './clients.routes.js';
+import { salesRouter } from './sales.routes.js';
 import { appointmentsRouter } from './appointments.routes.js';
 import { paymentsRouter } from './payments.routes.js';
 import {
@@ -32,6 +33,7 @@ apiRouter.use('/leads', leadsRouter);
 apiRouter.use('/requests', requestsRouter);
 apiRouter.use('/clients', clientsRouter);
 apiRouter.use('/contracts', contractsRouter);
+apiRouter.use('/sales', salesRouter);
 apiRouter.use('/appointments', appointmentsRouter);
 apiRouter.use('/promissory-notes', paymentsRouter);
 apiRouter.use('/utility-services', utilityServicesRouter);
