@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../widgets/theme/app_spacing.dart';
+import '../../widgets/theme/app_text_styles.dart';
 import '../../services/utils/formatters.dart';
 import '../../widgets/common/cards.dart';
 import '../../widgets/common/primary_button.dart';
@@ -15,9 +16,13 @@ import '../../services/providers/requests_provider.dart';
 
 /// Insignia del estado: Recibida · En seguimiento · Cerrada.
 StatusBadge requestBadge(LeadRequest r) => StatusBadge(
-      kind: switch (r.status) { 'nuevo' => BadgeKind.pending, 'en_seguimiento' => BadgeKind.confirmed, _ => BadgeKind.neutral },
-      label: r.statusLabel,
-    );
+  kind: switch (r.status) {
+    'nuevo' => BadgeKind.pending,
+    'en_seguimiento' => BadgeKind.confirmed,
+    _ => BadgeKind.neutral,
+  },
+  label: r.statusLabel,
+);
 
 /// «Mis solicitudes» (cliente) o «Solicitudes» del sitio y la app (personal con leads.manage).
 /// Aquí llegan la respuesta del asesor y las casas que propone, en lugar del correo.
@@ -35,7 +40,9 @@ class _RequestsPageState extends ConsumerState<RequestsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final staff = ref.watch(sessionProvider.select((s) => s.value?.isStaff ?? false));
+    final staff = ref.watch(
+      sessionProvider.select((s) => s.value?.isStaff ?? false),
+    );
     // Primero las que nadie atiende: el primer broker que la toma se queda con el seguimiento
     final filters = ['sin_asignar', ..._filters];
     final labels = ['Sin asignar', ..._labels];
@@ -46,7 +53,12 @@ class _RequestsPageState extends ConsumerState<RequestsPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.refresh(requestsProvider(status).future),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.screen, AppSpacing.sm, AppSpacing.screen, AppSpacing.xl),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screen,
+            AppSpacing.sm,
+            AppSpacing.screen,
+            AppSpacing.xl,
+          ),
           children: [
             InfoNotice(
               text: staff
@@ -55,40 +67,81 @@ class _RequestsPageState extends ConsumerState<RequestsPage> {
             ),
             const SizedBox(height: AppSpacing.md),
             if (staff) ...[
-              SegmentedTabs(tabs: labels, selected: _filter.clamp(0, filters.length - 1), onChanged: (i) => setState(() => _filter = i)),
+              SegmentedTabs(
+                tabs: labels,
+                selected: _filter.clamp(0, filters.length - 1),
+                onChanged: (i) => setState(() => _filter = i),
+              ),
               const SizedBox(height: AppSpacing.md),
             ] else ...[
-              PrimaryButton(label: 'Nueva solicitud', icon: Icons.add_home_outlined, onPressed: () => context.push('/home/requests/new')),
+              PrimaryButton(
+                label: 'Nueva solicitud',
+                icon: Icons.add_home_outlined,
+                onPressed: () => context.push('/home/requests/new'),
+              ),
               const SizedBox(height: AppSpacing.md),
             ],
             ...switch (list) {
               AsyncData(:final value) when value.isEmpty => [
-                  EmptyState(
-                    icon: Icons.mark_email_unread_outlined,
-                    title: staff ? 'Sin solicitudes' : 'Aún no tienes solicitudes',
-                    message: staff ? 'No hay solicitudes con este filtro.' : 'Toca «Nueva solicitud» y dinos qué necesitas.',
+                EmptyState(
+                  icon: Icons.mark_email_unread_outlined,
+                  title: staff
+                      ? 'Sin solicitudes'
+                      : 'Aún no tienes solicitudes',
+                  message: staff
+                      ? 'No hay solicitudes con este filtro.'
+                      : 'Toca «Nueva solicitud» y dinos qué necesitas.',
+                ),
+              ],
+              AsyncData(:final value) => [
+                for (final r in value) ...[
+                  AccordionCard(
+                    title: staff
+                        ? '${r.name ?? ''} · ${r.folio}'
+                        : '${r.reasonLabel} · ${r.folio}',
+                    subtitle: staff
+                        ? '${r.reasonLabel} · ${Fmt.dayMonthShort(r.createdAt)}'
+                        : Fmt.dayMonthShort(r.createdAt),
+                    trailing: requestBadge(r),
+                    children: [
+                      Text(
+                        [
+                          if (staff)
+                            r.priorityLabel ??
+                                r.brokerName ??
+                                'Sin broker asignado',
+                          if (staff && r.overdue) 'Sin atender',
+                          if (r.propertyName != null) r.propertyName!,
+                          r.summary,
+                          if (r.proposalCount > 0)
+                            '${r.proposalCount} ${r.proposalCount == 1 ? 'casa propuesta' : 'casas propuestas'}'
+                          else if (r.response != null)
+                            'Respondida',
+                        ].where((s) => s.isNotEmpty).join('\n'),
+                        style: AppTextStyles.body,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.open_in_new_rounded),
+                          label: const Text('Abrir solicitud'),
+                          // Dentro de la misma pestaña: /requests/:id (personal) o /home/requests/:id
+                          onPressed: () => context.push(
+                            '${GoRouterState.of(context).matchedLocation}/${r.id}',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              AsyncData(:final value) => [
-                  for (final r in value) ...[
-                    ListCard(
-                      title: staff ? '${r.name ?? ''} · ${r.folio}' : '${r.reasonLabel} · ${r.folio}',
-                      subtitle: [
-                        if (staff) r.reasonLabel,
-                        if (staff) r.priorityLabel ?? r.brokerName ?? 'Sin broker asignado',
-                        if (staff && r.overdue) 'Sin atender',
-                        r.propertyName ?? r.summary,
-                        Fmt.dayMonthShort(r.createdAt),
-                        if (r.proposalCount > 0) '${r.proposalCount} ${r.proposalCount == 1 ? 'casa propuesta' : 'casas propuestas'}' else if (r.response != null) 'Respondida',
-                      ].where((s) => s.isNotEmpty).join(' · '),
-                      trailing: requestBadge(r),
-                      // Dentro de la misma pestaña: /requests/:id (personal) o /home/requests/:id
-                      onTap: () => context.push('${GoRouterState.of(context).matchedLocation}/${r.id}'),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                  ],
-                ],
-              AsyncError(:final error) => [ErrorState(error: error, onRetry: () => ref.invalidate(requestsProvider(status)))],
+              ],
+              AsyncError(:final error) => [
+                ErrorState(
+                  error: error,
+                  onRetry: () => ref.invalidate(requestsProvider(status)),
+                ),
+              ],
               _ => [const SizedBox(height: 260, child: LoadingState(items: 3))],
             },
           ],

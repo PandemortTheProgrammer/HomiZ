@@ -8,7 +8,14 @@ import '../theme/app_text_styles.dart';
 /// Tarjeta gris de listas (expediente, pagarés, recibos, reportes) con texto blanco,
 /// subtítulo de 1-2 líneas y un badge o botón «Ver» a la derecha.
 class ListCard extends StatelessWidget {
-  const ListCard({super.key, required this.title, this.subtitle, this.trailing, this.onTap, this.caption});
+  const ListCard({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.onTap,
+    this.caption,
+  });
 
   final String title;
   final String? subtitle;
@@ -34,19 +41,40 @@ class ListCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: AppTextStyles.cardTitle.copyWith(color: Colors.white)),
+                    Text(
+                      title,
+                      style: AppTextStyles.cardTitle.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
                     if (caption != null) ...[
                       const SizedBox(height: AppSpacing.xxs),
-                      Text(caption!, style: AppTextStyles.cardTitle.copyWith(color: Colors.white, fontSize: 13)),
+                      Text(
+                        caption!,
+                        style: AppTextStyles.cardTitle.copyWith(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
                     ],
                     if (subtitle != null) ...[
                       const SizedBox(height: AppSpacing.xxs),
-                      Text(subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTextStyles.secondary.copyWith(color: Colors.white)),
+                      Text(
+                        subtitle!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.secondary.copyWith(
+                          color: Colors.white,
+                        ),
+                      ),
                     ],
                   ],
                 ),
               ),
-              if (trailing != null) ...[const SizedBox(width: AppSpacing.md), trailing!],
+              if (trailing != null) ...[
+                const SizedBox(width: AppSpacing.md),
+                trailing!,
+              ],
             ],
           ),
         ),
@@ -55,9 +83,78 @@ class ListCard extends StatelessWidget {
   }
 }
 
+/// Sección plegable para resumir contenido secundario sin ocultar su acceso.
+class AccordionCard extends StatelessWidget {
+  const AccordionCard({
+    super.key,
+    required this.title,
+    required this.children,
+    this.subtitle,
+    this.trailing,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final List<Widget> children;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final shape = RoundedRectangleBorder(borderRadius: AppRadius.cardAll);
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.cardAll,
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: Row(
+            children: [
+              Expanded(child: Text(title, style: AppTextStyles.cardTitle)),
+              if (trailing != null) ...[
+                const SizedBox(width: AppSpacing.sm),
+                trailing!,
+              ],
+            ],
+          ),
+          subtitle: subtitle == null
+              ? null
+              : Text(
+                  subtitle!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.secondary,
+                ),
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          childrenPadding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            0,
+            AppSpacing.md,
+            AppSpacing.md,
+          ),
+          shape: shape,
+          collapsedShape: shape,
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
 /// Tarjeta de resumen con barra de progreso verde (p. ej. «Estado de pagos»).
 class SummaryProgressCard extends StatelessWidget {
-  const SummaryProgressCard({super.key, required this.title, required this.lines, required this.progress});
+  const SummaryProgressCard({
+    super.key,
+    required this.title,
+    required this.lines,
+    required this.progress,
+  });
 
   final String title;
   final List<String> lines;
@@ -69,16 +166,25 @@ class SummaryProgressCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(color: AppColors.cardNeutral, borderRadius: AppRadius.cardAll),
+      decoration: BoxDecoration(
+        color: AppColors.cardNeutral,
+        borderRadius: AppRadius.cardAll,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: AppTextStyles.cardTitle.copyWith(color: Colors.white)),
+          Text(
+            title,
+            style: AppTextStyles.cardTitle.copyWith(color: Colors.white),
+          ),
           const SizedBox(height: AppSpacing.sm),
           for (final line in lines)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.xxs),
-              child: Text(line, style: AppTextStyles.secondary.copyWith(color: Colors.white)),
+              child: Text(
+                line,
+                style: AppTextStyles.secondary.copyWith(color: Colors.white),
+              ),
             ),
           const SizedBox(height: AppSpacing.md),
           Semantics(
@@ -112,7 +218,14 @@ class InfoNotice extends StatelessWidget {
       children: [
         const Icon(Icons.push_pin_rounded, color: AppColors.notice, size: 20),
         const SizedBox(width: AppSpacing.sm),
-        Expanded(child: Text(text, style: AppTextStyles.secondary.copyWith(color: AppColors.textSecondary))),
+        Expanded(
+          child: Text(
+            text,
+            style: AppTextStyles.secondary.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -120,7 +233,14 @@ class InfoNotice extends StatelessWidget {
 
 /// Tarjeta azul del panel de inicio: título, fecha, detalle opcional e ilustración a la derecha.
 class DashboardCard extends StatelessWidget {
-  const DashboardCard({super.key, required this.title, required this.value, this.detail, required this.illustration, this.onTap});
+  const DashboardCard({
+    super.key,
+    required this.title,
+    required this.value,
+    this.detail,
+    required this.illustration,
+    this.onTap,
+  });
 
   final String title;
   final String value;
@@ -133,8 +253,18 @@ class DashboardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final art = illustration.endsWith('.svg')
-        ? SvgPicture.asset(illustration, width: 92, height: 92, excludeFromSemantics: true)
-        : Image.asset(illustration, width: 92, height: 92, excludeFromSemantics: true);
+        ? SvgPicture.asset(
+            illustration,
+            width: 92,
+            height: 92,
+            excludeFromSemantics: true,
+          )
+        : Image.asset(
+            illustration,
+            width: 92,
+            height: 92,
+            excludeFromSemantics: true,
+          );
     return Material(
       color: AppColors.primaryCard,
       borderRadius: AppRadius.cardAll,
@@ -144,7 +274,12 @@ class DashboardCard extends StatelessWidget {
         onTap: onTap,
         child: Container(
           constraints: const BoxConstraints(minHeight: 132),
-          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.sm, AppSpacing.lg),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.sm,
+            AppSpacing.lg,
+          ),
           child: Row(
             children: [
               Expanded(
@@ -152,12 +287,29 @@ class DashboardCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(title, style: AppTextStyles.cardTitle.copyWith(color: Colors.white, fontSize: 16)),
+                    Text(
+                      title,
+                      style: AppTextStyles.cardTitle.copyWith(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
                     const SizedBox(height: AppSpacing.sm),
-                    Text(value, style: AppTextStyles.greeting.copyWith(color: Colors.white, fontSize: 22)),
+                    Text(
+                      value,
+                      style: AppTextStyles.greeting.copyWith(
+                        color: Colors.white,
+                        fontSize: 22,
+                      ),
+                    ),
                     if (detail != null) ...[
                       const SizedBox(height: AppSpacing.xs),
-                      Text(detail!, style: AppTextStyles.secondary.copyWith(color: Colors.white70)),
+                      Text(
+                        detail!,
+                        style: AppTextStyles.secondary.copyWith(
+                          color: Colors.white70,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -173,7 +325,13 @@ class DashboardCard extends StatelessWidget {
 
 /// Fila clave/valor con separador (Nombre, Presupuesto, Mascotas…).
 class KeyValueRow extends StatelessWidget {
-  const KeyValueRow({super.key, required this.label, required this.value, this.showDivider = true, this.stacked = false});
+  const KeyValueRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.showDivider = true,
+    this.stacked = false,
+  });
 
   final String label;
   final String value;
@@ -185,7 +343,9 @@ class KeyValueRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: stacked ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: stacked
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       children: [
         if (stacked)
           Padding(
@@ -193,24 +353,40 @@ class KeyValueRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: AppTextStyles.secondary.copyWith(fontSize: 13)),
+                Text(
+                  label,
+                  style: AppTextStyles.secondary.copyWith(fontSize: 13),
+                ),
                 const SizedBox(height: 2),
                 Text(value, style: AppTextStyles.cardTitle),
               ],
             ),
           )
         else
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: Text(label, style: AppTextStyles.secondary.copyWith(fontSize: 13))),
-              const SizedBox(width: AppSpacing.md),
-              Flexible(child: Text(value, textAlign: TextAlign.right, style: AppTextStyles.cardTitle.copyWith(fontWeight: FontWeight.w500))),
-            ],
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: AppTextStyles.secondary.copyWith(fontSize: 13),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Flexible(
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: AppTextStyles.cardTitle.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
         if (showDivider) const Divider(),
       ],
     );
