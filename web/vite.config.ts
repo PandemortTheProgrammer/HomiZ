@@ -13,7 +13,7 @@ export default defineConfig({
   // Dos páginas: el sitio público (index.html) y el panel (admin/index.html), cada una con su CSS
   build: {
     rollupOptions: {
-      input: { panel: 'admin/index.html', acceso: 'admin/login.html' },
+      input: { sitio: 'index.html', panel: 'admin/index.html', acceso: 'admin/login.html' },
     },
   },
 });
