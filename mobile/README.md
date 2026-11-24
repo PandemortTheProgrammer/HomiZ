@@ -36,6 +36,17 @@ En esta máquina la instalación detectada es `C:\Flutter\flutter`. Actualízala
 
 En la salida de `--version`, confirma que Dart sea `3.13.3` o superior. Si `where.exe flutter` muestra varias rutas, Windows usa primero la que aparece antes; actualiza la instalación que quieras usar y asegúrate de que su carpeta `bin` tenga prioridad en el `Path` de usuario o del sistema. Esto actualiza la instalación compartida por los proyectos que usan esa ruta, pero no otras copias de Flutter ni instalaciones administradas por herramientas como FVM.
 
+## Configuración de Firebase
+
+La configuración local está en `.env` (formato JSON), excluido de Git. Para preparar otro entorno, copia `.env.example` a `.env` y completa los valores de Firebase. Desde `mobile`, inicia o compila la app pasando el archivo:
+
+```powershell
+flutter run --dart-define-from-file=.env
+flutter build apk --dart-define-from-file=.env
+```
+
+Los valores de Firebase y la clave VAPID son configuración pública de cliente: quedan incluidos en la app compilada y no deben usarse para guardar credenciales privadas de servidor.
+
 Después, desde la raíz de este proyecto Flutter:
 
 ```powershell

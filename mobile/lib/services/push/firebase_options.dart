@@ -1,39 +1,60 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
-/// Configuración de Firebase (proyecto homiz-413ff) por plataforma. Estos datos son públicos: identifican la app.
-/// - Web: «Tus apps» → Homiz Web (firebaseConfig) y la clave de «Certificados push web».
-/// - Android: datos de android/app/google-services.json (paquete mx.zugar.homiz).
-/// - iOS: datos de ios/Runner/GoogleService-Info.plist (bundle mx.zugar.homiz) + clave APNs subida a Firebase.
-/// null = esa plataforma todavía no está registrada en Firebase: la app funciona igual, sin avisos push.
+/// Firebase config is supplied at build time with `--dart-define-from-file=.env`.
 abstract final class FirebaseConfig {
-  static const vapidKey = 'BEJw-k2x765RpmUta5eQpKFwF0Pfp5f8B7yRorKR792pTS0irlUE-dGdiGZj7sC9KDaZf3skbgCH8WpdhV25Elc';
-
-  static const _web = FirebaseOptions(
-    apiKey: 'AIzaSyBx7pt0_zgMJBrK0MoFiM91-7tOmRLtX1E',
-    authDomain: 'homiz-413ff.firebaseapp.com',
-    projectId: 'homiz-413ff',
-    storageBucket: 'homiz-413ff.firebasestorage.app',
-    messagingSenderId: '781670117568',
-    appId: '1:781670117568:web:ce01ba2a927343e7c57d25',
+  static const vapidKey = String.fromEnvironment('FIREBASE_VAPID_KEY');
+  static const _webApiKey = String.fromEnvironment('FIREBASE_WEB_API_KEY');
+  static const _webAppId = String.fromEnvironment('FIREBASE_WEB_APP_ID');
+  static const _androidApiKey = String.fromEnvironment(
+    'FIREBASE_ANDROID_API_KEY',
   );
-
-  static const FirebaseOptions _android = FirebaseOptions(
-    apiKey: 'AIzaSyD9ABCMIBFZ3uXA3OvCBHz_le7DifocQQs',
-    appId: '1:781670117568:android:76ec2a2314de49f6c57d25',
-    messagingSenderId: '781670117568',
-    projectId: 'homiz-413ff',
-    storageBucket: 'homiz-413ff.firebasestorage.app',
+  static const _androidAppId = String.fromEnvironment(
+    'FIREBASE_ANDROID_APP_ID',
   );
-
-  // Pendiente: se llena con GoogleService-Info.plist.
-  static const FirebaseOptions? _ios = null;
+  static const _authDomain = String.fromEnvironment('FIREBASE_AUTH_DOMAIN');
+  static const _projectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
+  static const _storageBucket = String.fromEnvironment(
+    'FIREBASE_STORAGE_BUCKET',
+  );
+  static const _messagingSenderId = String.fromEnvironment(
+    'FIREBASE_MESSAGING_SENDER_ID',
+  );
 
   static FirebaseOptions? get currentPlatform {
-    if (kIsWeb) return _web;
+    if (kIsWeb) {
+      if (_webApiKey.isEmpty ||
+          _webAppId.isEmpty ||
+          _authDomain.isEmpty ||
+          _projectId.isEmpty ||
+          _storageBucket.isEmpty ||
+          _messagingSenderId.isEmpty ||
+          vapidKey.isEmpty) {
+        return null;
+      }
+      return const FirebaseOptions(
+        apiKey: _webApiKey,
+        authDomain: _authDomain,
+        projectId: _projectId,
+        storageBucket: _storageBucket,
+        messagingSenderId: _messagingSenderId,
+        appId: _webAppId,
+      );
+    }
     return switch (defaultTargetPlatform) {
-      TargetPlatform.android => _android,
-      TargetPlatform.iOS => _ios,
+      TargetPlatform.android
+          when _androidApiKey.isNotEmpty &&
+              _androidAppId.isNotEmpty &&
+              _projectId.isNotEmpty &&
+              _storageBucket.isNotEmpty &&
+              _messagingSenderId.isNotEmpty =>
+        const FirebaseOptions(
+          apiKey: _androidApiKey,
+          appId: _androidAppId,
+          messagingSenderId: _messagingSenderId,
+          projectId: _projectId,
+          storageBucket: _storageBucket,
+        ),
       _ => null,
     };
   }
