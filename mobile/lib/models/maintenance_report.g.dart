@@ -1,10 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 part of 'maintenance_report.dart';
 
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
 
 _MaintenanceReport _$MaintenanceReportFromJson(Map<String, dynamic> json) =>
     _MaintenanceReport(

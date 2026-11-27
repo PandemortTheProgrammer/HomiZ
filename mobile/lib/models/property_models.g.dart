@@ -1,10 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 part of 'property_models.dart';
 
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
 
 _PropertyDetail _$PropertyDetailFromJson(Map<String, dynamic> json) =>
     _PropertyDetail(
