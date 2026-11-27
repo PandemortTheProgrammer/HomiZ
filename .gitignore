@@ -7,3 +7,43 @@
 node_modules/
 .dart_tool/
 .flutter-plugins-dependencies
+dist/
+coverage/
+
+# Archivos subidos y correos de desarrollo
+backend/uploads/
+backend/outbox/
+
+# Flutter / Dart
+mobile/build/
+mobile/.flutter-plugins
+mobile/.packages
+mobile/android/local.properties
+mobile/ios/Flutter/Generated.xcconfig
+mobile/**/*.g.dart.bak
+*.iml
+.idea/
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+*.log
+
+# Firebase: llave privada del servidor (cuenta de servicio). Nunca se sube.
+backend/firebase-key.json
+*firebase-adminsdk*.json
+mobile/android/app/google-services.json
+
+# Respaldos de la base (tienen datos personales)
+respaldos/
+
+# Llave de firma de Android (privada): nunca se sube
+mobile/android/key.properties
+*.jks
+*.keystore
+
+# Copias comprimidas del proyecto (pueden incluir dependencias o datos)
+*.zip
+
+# Compilados de Android
+mobile/android/build/

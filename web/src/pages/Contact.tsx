@@ -230,7 +230,7 @@ export function Contact() {
               <h2 id="cerca-titulo">Estamos cerca de ti</h2>
               <ul className="side-card__list">
                 <li><a href="tel:+529985550142"><Icon id="phone" />+52 998 555 0142</a></li>
-                <li><a href="mailto:hola@zugar.mx"><Icon id="mail" />hola@zugar.mx</a></li>
+                <li><a href="mailto:urielagz2530@gmail.com"><Icon id="mail" />urielagz2530@gmail.com</a></li>
                 <li><span><Icon id="clock" />Lun–vie 9:00–18:00 · Sáb 10:00–14:00</span></li>
               </ul>
               <p className="side-card__note">No tenemos oficina física: te atendemos por teléfono, WhatsApp y directamente en cada casa.</p>
@@ -441,7 +441,7 @@ export function Contact() {
         <div className="wrap privacy">
           <h2 id="privacidad-titulo">Aviso de privacidad</h2>
           <p>Zugar Inmobiliaria, con operaciones en Cancún, Quintana Roo, es responsable del tratamiento de los datos personales que nos compartes. Los usamos únicamente para responder tus solicitudes, coordinar visitas a las casas y darte seguimiento sobre las propiedades de tu interés.</p>
-          <p>No vendemos ni compartimos tus datos con terceros, salvo con el propietario del inmueble cuando tú lo autorizas. Para ejercer tus derechos de acceso, rectificación, cancelación u oposición, escríbenos a <a href="mailto:privacidad@zugar.mx">privacidad@zugar.mx</a>.</p>
+          <p>No vendemos ni compartimos tus datos con terceros, salvo con el propietario del inmueble cuando tú lo autorizas. Para ejercer tus derechos de acceso, rectificación, cancelación u oposición, escríbenos a <a href="mailto:urielagz2530@gmail.com">urielagz2530@gmail.com</a>.</p>
           <p><PrivacyLink className="btn btn--secondary"><Icon id="shield" />Leer el aviso de privacidad completo</PrivacyLink></p>
         </div>
       </section>

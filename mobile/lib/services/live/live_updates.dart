@@ -8,9 +8,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../providers/appointments_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/dashboard_provider.dart';
-import '../providers/maintenance_provider.dart';
 import '../providers/notifications_provider.dart';
-import '../providers/payments_provider.dart';
 import '../providers/property_provider.dart';
 import '../providers/requests_provider.dart';
 import '../network/api_client.dart';
@@ -139,16 +137,5 @@ void _refresh(Ref ref) {
     ..invalidate(requestMessagesProvider)
     ..invalidate(staffDashboardProvider)
     ..invalidate(clientDashboardProvider)
-    ..invalidate(notesProvider)
-    ..invalidate(overdueNotesProvider)
-    ..invalidate(allNotesProvider)
-    ..invalidate(receiptsProvider)
-    ..invalidate(dossierProvider)
-    ..invalidate(propertyDetailProvider)
-    ..invalidate(inventoryProvider)
-    ..invalidate(allHousesProvider)
-    ..invalidate(catalogProvider)
-    ..invalidate(newReportsProvider)
-    ..invalidate(maintenanceReportsProvider)
-    ..invalidate(maintenanceReportProvider);
+    ..invalidate(catalogProvider);
 }

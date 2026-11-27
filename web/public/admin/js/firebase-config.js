@@ -4,13 +4,13 @@
 self.ZUGAR_FIREBASE = {
   sdk: 'https://www.gstatic.com/firebasejs/10.14.1/',
   config: {
-    apiKey: 'TU_API_KEY',
+    apiKey: 'AIzaSyBx7pt0_zgMJBrK0MoFiM91-7tOmRLtX1E',
     authDomain: 'homiz-413ff.firebaseapp.com',
     projectId: 'homiz-413ff',
     storageBucket: 'homiz-413ff.firebasestorage.app',
-    messagingSenderId: 'TU_SENDER_ID',
-    appId: 'TU_APP_ID'
+    messagingSenderId: '781670117568',
+    appId: '1:781670117568:web:ce01ba2a927343e7c57d25'
   },
   // Firebase → Configuración del proyecto → Cloud Messaging → Certificados push web
-  vapidKey: 'TU_LLAVE_VAPID'
+  vapidKey: 'BEJw-k2x765RpmUta5eQpKFwF0Pfp5f8B7yRorKR792pTS0irlUE-dGdiGZj7sC9KDaZf3skbgCH8WpdhV25Elc'
 };

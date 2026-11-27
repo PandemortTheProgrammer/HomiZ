@@ -10,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/notifications_provider.dart';
 import '../network/api_client.dart';
 import '../../screens/app_router.dart';
-import '../utils/env.dart';
 import 'firebase_options.dart';
 
 /// true si Firebase se inició al arrancar (main.dart). En pruebas y en plataformas sin configuración: false.
@@ -21,7 +20,7 @@ final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 /// Inicia Firebase si la plataforma ya está registrada en el proyecto. Nunca falla: sin Firebase no hay push.
 Future<bool> initFirebase() async {
-  final options = Env.demo ? null : FirebaseConfig.currentPlatform;
+  final options = FirebaseConfig.currentPlatform;
   if (options == null) return false;
   try {
     await Firebase.initializeApp(options: options);

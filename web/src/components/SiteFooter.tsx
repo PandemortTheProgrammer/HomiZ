@@ -48,7 +48,7 @@ export function SiteFooter() {
             <p className="footer-title">Cerca de ti</p>
             <ul>
               <li><a href="tel:+529985550142"><Icon id="phone" size="sm" />+52 998 555 0142</a></li>
-              <li><a href="mailto:hola@zugar.mx"><Icon id="mail" size="sm" />hola@zugar.mx</a></li>
+              <li><a href="mailto:urielagz2530@gmail.com"><Icon id="mail" size="sm" />urielagz2530@gmail.com</a></li>
               <li><span><Icon id="clock" size="sm" />Lun–vie 9:00–18:00 · Sáb 10:00–14:00</span></li>
               <li><span><Icon id="pin" size="sm" />Cancún, Quintana Roo · Atención en línea y en cada casa</span></li>
             </ul>

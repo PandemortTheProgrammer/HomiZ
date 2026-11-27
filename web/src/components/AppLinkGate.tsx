@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { APP_URL } from '../lib/appLink';
 import { Dialog } from './Dialog';

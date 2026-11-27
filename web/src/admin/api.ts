@@ -16,6 +16,8 @@ export interface ApiFailure {
   mensaje?: string;
   detalles?: unknown;
   sinConexion?: boolean;
+  /** Propiedad nueva que se creó aunque fallara un paso posterior (fotos, estado…) */
+  creada?: string;
 }
 
 /** Avisos flotantes del panel (los registra el Shell) */
@@ -349,8 +351,9 @@ export const ZApi = {
     ZApi.files[src] = file;
   },
 
-  propertySave(p: Property, isNew: boolean, before: Property | null, onCreated?: (code: string) => void) {
-    if (!apiActive()) return;
+  /** Resuelve con el código cuando el servidor confirmó todo. Si falla, el error trae `creada`: el código si la casa nueva sí alcanzó a crearse. */
+  propertySave(p: Property, isNew: boolean, before: Property | null): Promise<string> {
+    if (!apiActive()) return Promise.reject({ mensaje: 'No hay sesión con el servidor.' } satisfies ApiFailure);
     const prevZone = before && before.zone === p.zone ? before._zoneKey : null;
     const sameZone = D.properties.find((x) => x.zone === p.zone && x._zoneKey);
     const data: Record<string, unknown> = {
@@ -376,7 +379,7 @@ export const ZApi = {
     }
     let id = before ? before._id! : '';
     let code = '';
-    const save = (isNew
+    const steps = (isNew
       ? request<{ id: string; code: string }>('POST', '/properties', { brokerId: p.broker || undefined, ...data }).then((r) => { id = r.id; code = r.code; })
       : request('PATCH', '/properties/' + id, data)
     )
@@ -384,7 +387,9 @@ export const ZApi = {
       .then((photos) => request('PATCH', '/properties/' + id, { photos }))
       .then(() => { if (!isNew && before!.broker !== p.broker && p.broker) return request('PATCH', `/properties/${id}/broker`, { brokerId: p.broker }); })
       .then(() => request('PATCH', `/properties/${id}/availability`, { status: p.status, visibility: p.visibility }));
-    sync(save, () => { if (isNew && code) onCreated?.(code); });
+    return save(steps).then(() => code || before!.id, (e: ApiFailure) => {
+      throw { ...e, mensaje: e?.mensaje || 'No se pudo completar el guardado. Revisa tu conexión.', creada: code || undefined };
+    });
   },
 };
 

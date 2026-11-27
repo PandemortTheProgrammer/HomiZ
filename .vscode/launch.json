@@ -3,13 +3,13 @@
   "version": "0.2.0",
   "configurations": [
     {
-      // Teléfono o emulador con la API publicada en Render (no necesita la API en esta computadora).
+      // Teléfono o emulador con la API publicada (dominio de Zugar; no necesita la API en esta computadora).
       "name": "Homiz · Render (internet)",
       "type": "dart",
       "request": "launch",
       "cwd": "mobile",
       "program": "lib/main.dart",
-      "args": ["--dart-define=API_URL=https://homiz-api.onrender.com/api/v1"]
+      "args": ["--dart-define=API_URL=https://api.zugar.com.mx/api/v1"]
     },
     {
       // Emulador de Android con la API de esta computadora (sin API_URL usa 10.0.2.2:3000).
@@ -18,15 +18,6 @@
       "request": "launch",
       "cwd": "mobile",
       "program": "lib/main.dart"
-    },
-    {
-      // Sin API: pantallas con datos de ejemplo.
-      "name": "Homiz · modo demo",
-      "type": "dart",
-      "request": "launch",
-      "cwd": "mobile",
-      "program": "lib/main.dart",
-      "args": ["--dart-define=DEMO=true"]
     }
   ]
 }

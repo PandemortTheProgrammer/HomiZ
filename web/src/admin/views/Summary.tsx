@@ -6,9 +6,11 @@ import { useOverlay } from '../components/Overlay';
 import { ApptBadge, Cover, Crumbs, Icon, Metric, PageHead } from '../components/ui';
 import { broker, dateFull, dateLong, dateShort, downloadCSV, isoDate, opLabel, parseDate, person, plural, priceLabel, prop, upcoming, useStore, Z, t12 } from '../store';
 
+/** Indicadores que calcula el servidor con SQL (GET /dashboard) */
 interface DashboardCounts { appointmentsToConfirm: number; appointmentsToday: number; newLeads: number; overdueNotes: number; upcomingNotes: number; openReports: number }
 type DashState = { status: 'loading' } | { status: 'ok'; counts: DashboardCounts; at: Date } | { status: 'error'; message: string };
 
+/** Lunes a domingo de la semana de hoy (hora de Cancún) */
 function thisWeek() {
   const today = parseDate(Z.TODAY);
   const monday = new Date(today);
@@ -18,6 +20,7 @@ function thisWeek() {
   return { from: isoDate(monday), to: isoDate(sunday) };
 }
 
+/** Módulo 1 · Resumen (dashboard) */
 export function Summary() {
   const D = useStore();
   const navigate = useNavigate();
@@ -27,6 +30,7 @@ export function Summary() {
   const appts = D.appointments.filter((a) => a.date >= week.from && a.date <= week.to);
   const firstName = (currentSession()?.name || '').split(' ')[0];
 
+  // Indicadores del servidor: se piden al abrir y otra vez cada que cambian los datos del panel
   const [dash, setDash] = useState<DashState>({ status: 'loading' });
   const fetchDash = () => {
     setDash({ status: 'loading' });
@@ -42,7 +46,7 @@ export function Summary() {
   const clients = count(D.people, (p) => p.type === 'cliente');
   const aStatus = (s: string) => count(appts, (a) => a.status === s);
   const next = upcoming().slice(0, 3);
-
+  // Disponibles pero sin publicar (antes «borradores»): falta completar o publicarlas
   const drafts = props.filter((p) => p.status === 'disponible' && p.visibility === 'pausada');
   const pending = upcoming((a) => a.status === 'por-confirmar');
   const featured = props.find((p) => p.status === 'disponible' && p.visibility === 'publicada') || props[0];
@@ -84,6 +88,7 @@ export function Summary() {
         <Metric label="Citas esta semana" value={appts.length} note={`${aStatus('confirmada')} confirmadas · ${aStatus('por-confirmar')} por confirmar`} />
       </div>
 
+      {/* GET /dashboard: conteos hechos en la base de datos (carga, error y datos) */}
       <section className="card card--pad" aria-labelledby="dash-title" aria-busy={dash.status === 'loading'} style={{ marginBottom: '1.5rem' }}>
         <div className="card__head">
           <h2 className="card__title" id="dash-title">Indicadores del servidor</h2>

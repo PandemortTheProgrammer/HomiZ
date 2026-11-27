@@ -1,11 +1,14 @@
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
-import { pool } from '../config/database.js';
 import { insertActivity } from '../models/activity.model.js';
 import { currentUser, type AuthUser } from '../middlewares/authenticate.js';
 import { AppError } from '../middlewares/error-handler.js';
 import { emailField, money, nameField, pagination, paged } from '../middlewares/validate.js';
+import * as Repo from '../repositories/clients.repository.js';
 import { assertPropertyAccess, isAdmin } from '../services/access.service.js';
+
+/* Controlador de /clients: valida la entrada, aplica las reglas de negocio y responde.
+   El SQL vive en repositories/clients.repository.ts. */
 
 const FOLLOW = ['Nuevo contacto', 'En seguimiento', 'Visita confirmada', 'Por confirmar', 'Reservada', 'Contrato vigente', 'Contrato finalizado'] as const;
 
@@ -44,19 +47,8 @@ export const updateDto = z
   .object(Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.optional()])))
   .refine((v) => Object.keys(v).length > 0, 'Envía al menos un dato para actualizar.');
 
-const COLS: Record<keyof typeof fields, string> = {
-  name: 'name', email: 'email', phone: 'phone', address: 'address', kind: 'kind', label: 'label', nationality: 'nationality',
-  occupation: 'occupation', operation: 'operation', budget: 'budget', budgetAmount: 'budget_amount', needs: 'needs',
-  hasPets: 'has_pets', petsCount: 'pets_count', occupants: 'occupants', followStatus: 'follow_status', propertyId: 'property_id', brokerId: 'broker_id',
-};
 
-const SELECT = `
-  SELECT c.*, p.code AS property_code, p.name AS property_name, b.name AS broker_name, (c.user_id IS NOT NULL) AS has_account
-    FROM clients c
-    LEFT JOIN properties p ON p.id = c.property_id
-    LEFT JOIN users b ON b.id = c.broker_id`;
-
-type Row = Record<string, unknown> & { id: string; broker_id: string | null; property_id: string | null };
+type Row = Repo.ClientRow;
 
 const present = (c: Row) => ({
   id: c.id, code: c.code, kind: c.kind, label: c.label, name: c.name, email: c.email, phone: c.phone, address: c.address,
@@ -68,31 +60,19 @@ const present = (c: Row) => ({
 });
 
 /** El broker ve los clientes que tiene asignados o que están ligados a sus casas. */
-function scopeSql(user: AuthUser, params: unknown[]): string {
-  if (isAdmin(user)) return '';
-  params.push(user.id);
-  return `AND (c.broker_id = $${params.length} OR c.property_id IN (SELECT id FROM properties WHERE broker_id = $${params.length}))`;
-}
+const scopeOf = (user: AuthUser): Repo.ClientScope => ({ userId: user.id, admin: isAdmin(user) });
 
 async function findScoped(user: AuthUser, id: string): Promise<Row> {
-  const params: unknown[] = [id];
-  const { rows } = await pool.query<Row>(`${SELECT} WHERE c.id = $1 AND c.active ${scopeSql(user, params)}`, params);
-  if (!rows[0]) throw new AppError(404, 'NOT_FOUND', 'El cliente no existe o no lo tienes asignado.');
-  return rows[0];
+  const row = await Repo.findScoped(scopeOf(user), id);
+  if (!row) throw new AppError(404, 'NOT_FOUND', 'El cliente no existe o no lo tienes asignado.');
+  return row;
 }
 
 export const list: RequestHandler = async (_req, res) => {
   const user = currentUser(res);
   const q = res.locals.query as z.infer<typeof listQueryDto>;
-  const params: unknown[] = [];
-  let where = `WHERE c.active ${scopeSql(user, params)}`;
-  if (q.q) where += ` AND (c.name ILIKE $${params.push(`%${q.q}%`)} OR c.email ILIKE $${params.length} OR c.phone ILIKE $${params.length})`;
-  if (q.kind) where += ` AND c.kind = $${params.push(q.kind)}`;
-  if (q.followStatus) where += ` AND c.follow_status = $${params.push(q.followStatus)}`;
-  if (q.propertyId) where += ` AND c.property_id = $${params.push(q.propertyId)}`;
-  const total = await pool.query<{ n: string }>(`SELECT count(*) AS n FROM clients c ${where}`, params);
-  const { rows } = await pool.query<Row>(`${SELECT} ${where} ORDER BY c.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, q.limit, (q.page - 1) * q.limit]);
-  res.json(paged(rows.map(present), Number(total.rows[0].n), q));
+  const { rows, total } = await Repo.list(scopeOf(user), q);
+  res.json(paged(rows.map(present), total, q));
 };
 
 export const getOne: RequestHandler = async (_req, res) => {
@@ -106,44 +86,7 @@ export const getOne: RequestHandler = async (_req, res) => {
 export const overview: RequestHandler = async (_req, res) => {
   const user = currentUser(res);
   const c = await findScoped(user, (res.locals.params as { id: string }).id);
-  const email = String(c.email ?? '');
-  const [leads, appointments, contracts, activity] = await Promise.all([
-    pool.query(
-      `SELECT l.id, l.folio, l.reason, l.status, l.created_at AS "createdAt", p.code AS "propertyCode", p.name AS "propertyName",
-              (SELECT count(*)::int FROM lead_proposals x WHERE x.lead_id = l.id) AS proposals
-         FROM leads l LEFT JOIN properties p ON p.id = l.property_id
-        WHERE l.client_id = $1 OR ($2 <> '' AND lower(l.email) = lower($2)) ORDER BY l.created_at DESC LIMIT 30`,
-      [c.id, email],
-    ),
-    pool.query(
-      `SELECT a.id, a.code, a.status, a.scheduled_at AS "scheduledAt", p.code AS "propertyCode", p.name AS "propertyName", b.name AS broker
-         FROM appointments a JOIN properties p ON p.id = a.property_id LEFT JOIN users b ON b.id = a.broker_id
-        WHERE a.client_id = $1 ORDER BY a.scheduled_at DESC LIMIT 30`,
-      [c.id],
-    ),
-    pool.query(
-      `SELECT ct.id, ct.status, to_char(ct.start_date, 'YYYY-MM-DD') AS "startDate", to_char(ct.end_date, 'YYYY-MM-DD') AS "endDate",
-              ct.monthly_rent AS "monthlyRent", ct.payment_day AS "paymentDay", p.code AS "propertyCode", p.name AS "propertyName",
-              count(n.*) FILTER (WHERE n.status <> 'cancelled')::int AS "notesTotal", count(n.*) FILTER (WHERE n.status = 'paid')::int AS "notesPaid",
-              count(n.*) FILTER (WHERE n.status = 'overdue')::int AS "notesOverdue",
-              to_char(min(n.due_date) FILTER (WHERE n.status IN ('pending', 'overdue')), 'YYYY-MM-DD') AS "nextDue",
-              (SELECT count(*)::int FROM documents d JOIN promissory_notes x ON x.id = d.promissory_note_id WHERE x.contract_id = ct.id AND d.type = 'stamp') AS stamps
-         FROM contracts ct JOIN properties p ON p.id = ct.property_id LEFT JOIN promissory_notes n ON n.contract_id = ct.id
-        WHERE ct.client_id = $1 GROUP BY ct.id, p.code, p.name ORDER BY ct.start_date DESC`,
-      [c.id],
-    ),
-    // Lo que hizo la persona (en la app o el sitio) y lo que se hizo con su expediente
-    pool.query(
-      `SELECT a.action, a.description, a.created_at AS "createdAt", u.name AS "user", (u.type = 'client') AS "byClient"
-         FROM activity_log a LEFT JOIN users u ON u.id = a.user_id
-        WHERE ($1::uuid IS NOT NULL AND a.user_id = $1) OR (a.entity = 'client' AND a.entity_id = $2)
-           OR (a.entity = 'lead' AND a.entity_id IN (SELECT id FROM leads WHERE client_id = $2))
-           OR (a.entity = 'appointment' AND a.entity_id IN (SELECT id FROM appointments WHERE client_id = $2))
-        ORDER BY a.created_at DESC LIMIT 40`,
-      [c.user_id ?? null, c.id],
-    ),
-  ]);
-  res.json({ client: present(c), leads: leads.rows, appointments: appointments.rows, contracts: contracts.rows, activity: activity.rows });
+  res.json({ client: present(c), ...(await Repo.overview(c)) });
 };
 
 async function checkLinks(user: AuthUser, d: Record<string, unknown>) {
@@ -158,12 +101,9 @@ export const create: RequestHandler = async (_req, res) => {
   // Una persona nueva no tiene contrato: entra como prospecto (inquilino solo con «Rentarle esta casa»)
   if (d.kind === 'inquilino' || d.followStatus === 'Contrato vigente') throw NEEDS_CONTRACT;
   if (!isAdmin(user)) d.brokerId = user.id;
-  const cols: string[] = [];
-  const vals: unknown[] = [];
-  for (const [k, col] of Object.entries(COLS)) if (d[k] !== undefined) { cols.push(col); vals.push(d[k]); }
-  const { rows } = await pool.query<{ id: string }>(`INSERT INTO clients (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING id`, vals);
-  await insertActivity({ userId: user.id, propertyId: (d.propertyId as string) ?? null, entity: 'client', entityId: rows[0].id, action: 'create', description: `${user.name} registró a ${d.name as string}.` });
-  res.status(201).json(present(await findScoped(user, rows[0].id)));
+  const id = await Repo.insert(d);
+  await insertActivity({ userId: user.id, propertyId: (d.propertyId as string) ?? null, entity: 'client', entityId: id, action: 'create', description: `${user.name} registró a ${d.name as string}.` });
+  res.status(201).json(present(await findScoped(user, id)));
 };
 
 /**
@@ -179,14 +119,9 @@ export const update: RequestHandler = async (_req, res) => {
   const d = res.locals.body as Record<string, unknown>;
   await checkLinks(user, d);
   if ((d.kind === 'inquilino' && before.kind !== 'inquilino') || (d.followStatus === 'Contrato vigente' && before.follow_status !== 'Contrato vigente')) {
-    const { rowCount } = await pool.query(`SELECT 1 FROM contracts WHERE client_id = $1 AND status = 'active'`, [id]);
-    if (!rowCount) throw NEEDS_CONTRACT;
+    if (!(await Repo.hasActiveContract(id))) throw NEEDS_CONTRACT;
   }
-  const sets: string[] = [];
-  const vals: unknown[] = [];
-  for (const [k, col] of Object.entries(COLS)) if (d[k] !== undefined) { vals.push(d[k]); sets.push(`${col} = $${vals.length}`); }
-  vals.push(id);
-  await pool.query(`UPDATE clients SET ${sets.join(', ')} WHERE id = $${vals.length}`, vals);
+  await Repo.update(id, d);
   await insertActivity({ userId: user.id, propertyId: before.property_id, entity: 'client', entityId: id, action: 'update', description: `${user.name} actualizó el expediente de ${before.name as string}.`, newValues: d });
   res.json(present(await findScoped(user, id)));
 };
@@ -196,14 +131,9 @@ export const remove: RequestHandler = async (_req, res) => {
   const user = currentUser(res);
   const { id } = res.locals.params as { id: string };
   const c = await findScoped(user, id);
-  const { rowCount } = await pool.query(`SELECT 1 FROM contracts WHERE client_id = $1 AND status = 'active'`, [id]);
-  if (rowCount) throw new AppError(409, 'HAS_ACTIVE_CONTRACT', 'El cliente tiene un contrato vigente. Finalízalo antes de darlo de baja.');
-  const cancelled = await pool.query(
-    `UPDATE appointments SET status = 'cancelada', reason = 'El cliente se dio de baja.'
-      WHERE client_id = $1 AND status IN ('por-confirmar', 'confirmada') AND scheduled_at > now()`,
-    [id],
-  );
-  await pool.query('UPDATE clients SET active = FALSE WHERE id = $1', [id]);
+  if (await Repo.hasActiveContract(id)) throw new AppError(409, 'HAS_ACTIVE_CONTRACT', 'El cliente tiene un contrato vigente. Finalízalo antes de darlo de baja.');
+  const cancelled = await Repo.cancelUpcomingAppointments(id);
+  await Repo.deactivate(id);
   await insertActivity({ userId: user.id, propertyId: c.property_id, entity: 'client', entityId: id, action: 'delete', description: `${user.name} dio de baja el expediente de ${c.name as string}.` });
-  res.json({ message: 'El expediente se dio de baja. Su historial se conserva.', appointmentsCancelled: cancelled.rowCount ?? 0 });
+  res.json({ message: 'El expediente se dio de baja. Su historial se conserva.', appointmentsCancelled: cancelled });
 };

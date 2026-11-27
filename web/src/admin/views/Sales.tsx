@@ -8,14 +8,21 @@ import { Badge, Icon, Metric, Options, Tabs } from '../components/ui';
 import { D as Data, dateShort, money, person, plural, prop, rerender, useStore, Z } from '../store';
 import { useApiData } from './Payments';
 
+/*
+ * Ventas (decisión 124): la inmobiliaria no administra la casa vendida. Solo se registra el cierre:
+ * folio VEN-###, comprobante en PDF para el comprador (en su app) y, si se tiene, el contrato firmado.
+ */
+
 const S = { tab: 'closed', selected: '' };
 const failMsg = (e: unknown) => (e as ApiFailure)?.mensaje || 'No se pudo guardar. Inténtalo de nuevo.';
 const PAYMENT_METHODS = ['Contado', 'Crédito bancario', 'Infonavit', 'Fovissste', 'Cofinavit', 'Otro'];
-
+/** Umbral de aviso de la Ley Antilavado mientras llega el de la API (8,025 UMA × $117.31 de 2026) */
 const FALLBACK_THRESHOLD = 941412.75;
 
+/** Casas que se pueden vender: en venta, no vendidas y guardadas en el servidor */
 const sellable = (id?: string) => { const h = id ? prop(id) : undefined; return !!h && h.op === 'venta' && h.status !== 'vendida' && !!h._id; };
 
+/** La casa que más probablemente compró: la de su expediente o la de su cita más reciente */
 function suggestHouse(personId: string): { id: string; why: string } | null {
   const per = person(personId);
   if (sellable(per.property)) return { id: per.property, why: 'la casa de su expediente' };
@@ -25,6 +32,7 @@ function suggestHouse(personId: string): { id: string; why: string } | null {
   return last ? { id: last.property, why: `su cita ${last.status === 'realizada' ? 'realizada' : 'más reciente'} (${dateShort(last.date)})` } : null;
 }
 
+/** «Registrar venta»: comprador, casa, fecha, precio, forma de pago, notaría, identificación y PDF (opcional). */
 export function SaleForm({ pre = {}, close, onDone }: { pre?: { property?: string; person?: string }; close: () => void; onDone: (m: string) => void }) {
   const D = useStore();
   const [personId, setPersonId] = useState(pre.person ?? '');
@@ -135,6 +143,7 @@ export function SaleForm({ pre = {}, close, onDone }: { pre?: { property?: strin
   );
 }
 
+/** Anular una venta registrada por error: la casa vuelve a estar disponible (pausada). */
 function VoidForm({ s, close, onDone }: { s: Sale; close: () => void; onDone: (m: string) => void }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -225,6 +234,7 @@ function SaleDetail({ s, onChanged }: { s: Sale; onChanged: () => void }) {
   );
 }
 
+/** Ventas dentro de la sección «Rentas y ventas» */
 export function SalesPanel({ reloadKey }: { reloadKey: number }) {
   const [tab, setTab] = useState(S.tab);
   const [selected, setSelected] = useState(S.selected);

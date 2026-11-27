@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <!-- Teléfono o emulador con la API publicada en Render (no necesita la API en esta computadora). -->
   <configuration default="false" name="Homiz (Render)" type="FlutterRunConfigurationType" factoryName="Flutter">
-    <option name="additionalArgs" value="--dart-define=API_URL=https://homiz-api.onrender.com/api/v1" />
+    <option name="additionalArgs" value="--dart-define=API_URL=https://api.zugar.com.mx/api/v1" />
     <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
     <method v="2" />
   </configuration>

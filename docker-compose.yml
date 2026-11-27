@@ -1,0 +1,23 @@
+# Base de datos para desarrollo: docker compose up -d
+# Después, en backend/: copia .env.example a .env y ejecuta npm run db:setup
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: homiz-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: homiz
+      POSTGRES_USER: homiz
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-homiz_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - homiz-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homiz -d homiz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  homiz-pgdata:

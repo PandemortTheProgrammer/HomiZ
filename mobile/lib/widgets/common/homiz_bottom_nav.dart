@@ -2,36 +2,29 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// Barra inferior: ícono con su nombre (Inicio, Propiedades solo para administración, Citas y, para el
-/// personal que atiende solicitudes, Solicitudes). La pestaña activa y la que tiene el puntero encima se pintan de color.
+/// Barra inferior: ícono con su nombre (Inicio, Citas y, para el personal que atiende solicitudes,
+/// Solicitudes). La pestaña activa y la que tiene el puntero encima se pintan de color.
 class HomizBottomNav extends StatelessWidget {
-  const HomizBottomNav({super.key, required this.currentIndex, required this.onTap, this.showRequests = false, this.newRequests = 0, this.staff = false, this.showProperty = true});
+  const HomizBottomNav({super.key, required this.currentIndex, required this.onTap, this.showRequests = false, this.newRequests = 0});
 
-  /// Índice de la rama del router (0 Inicio, 1 Propiedades, 2 Citas, 3 Solicitudes), aunque alguna pestaña no se vea.
+  /// Índice de la rama del router (0 Inicio, 1 Citas, 2 Solicitudes).
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  /// Pestaña de propiedades: solo administración. Cliente y broker se enfocan en citas y solicitudes.
-  final bool showProperty;
-
-  /// Cuarta pestaña «Solicitudes» (brokers y administración con leads.manage).
+  /// Pestaña «Solicitudes» (brokers y administración con leads.manage).
   final bool showRequests;
 
   /// Solicitudes nuevas: número sobre el ícono de Solicitudes.
   final int newRequests;
 
-  /// El personal ve «Propiedades» en lugar de «Mi propiedad».
-  final bool staff;
-
-  static const _requestsBranch = 3;
+  static const _requestsBranch = 2;
 
   @override
   Widget build(BuildContext context) {
     // (rama del router, ícono, ícono activo, nombre)
     final items = [
       (0, Icons.home_outlined, Icons.home_rounded, 'Inicio'),
-      if (showProperty) (1, Icons.apartment_outlined, Icons.apartment_rounded, staff ? 'Propiedades' : 'Mi propiedad'),
-      (2, Icons.calendar_today_outlined, Icons.calendar_today_rounded, 'Citas'),
+      (1, Icons.calendar_today_outlined, Icons.calendar_today_rounded, 'Citas'),
       if (showRequests) (_requestsBranch, Icons.mark_email_unread_outlined, Icons.mark_email_unread_rounded, 'Solicitudes'),
     ];
     return DecoratedBox(

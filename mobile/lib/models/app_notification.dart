@@ -24,13 +24,9 @@ abstract class AppNotification with _$AppNotification {
   factory AppNotification.fromJson(Map<String, dynamic> json) => _$AppNotificationFromJson(json);
 
   /// Ruta de la pantalla relacionada (null si no hay a dónde ir).
+  /// La app solo tiene citas y solicitudes: los avisos de pagos, documentos, reportes o ventas no abren nada.
   String? get route => switch (entity) {
         'appointment' when entityId != null => '/appointments/$entityId',
-        'promissory_note' || 'payment' || 'receipt' => '/property?tab=2',
-        'maintenance_report' when entityId != null => '/property/maintenance/$entityId',
-        'document' => '/property?tab=1',
-        'property' || 'contract' => '/property',
-        'sale' => '/home/purchases',
         'lead' when entityId != null => '/home/requests/$entityId',
         _ => null,
       };
