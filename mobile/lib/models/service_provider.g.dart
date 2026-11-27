@@ -1,10 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 part of 'service_provider.dart';
 
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
 
 _ServiceProvider _$ServiceProviderFromJson(Map<String, dynamic> json) =>
     _ServiceProvider(
