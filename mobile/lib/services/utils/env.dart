@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-/// Configuración por ambiente: flutter run --dart-define=API_URL=https://api.zugar.com.mx/api/v1
+/// Configuración por ambiente: flutter run --dart-define=API_URL=https://api.zugar.mx/api/v1
 /// Sin API_URL:
 /// - En el teléfono o el emulador de Android: http://10.0.2.2:3000/api/v1 («localhost» de la computadora).
 /// - En la versión web: el puerto 3000 del mismo servidor que sirve la app (localhost, la IP de la red o el puerto
@@ -9,7 +9,11 @@ import 'package:flutter/foundation.dart';
 abstract final class Env {
   static const _fromDefine = String.fromEnvironment('API_URL');
 
+  /// flutter run --dart-define=DEMO=true: pantallas con datos de ejemplo, sin API (network/demo_adapter.dart).
+  static const demo = bool.fromEnvironment('DEMO');
+
   static String get apiUrl {
+    if (demo) return 'http://demo.local/api/v1';
     if (_fromDefine.isNotEmpty) return _fromDefine;
     if (kIsWeb) return apiFor(Uri.base);
     return 'http://10.0.2.2:3000/api/v1';

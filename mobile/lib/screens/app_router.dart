@@ -17,7 +17,6 @@ import 'auth/splash_page.dart';
 import 'home/home_page.dart';
 import 'notifications/notifications_page.dart';
 import 'profile/profile_page.dart';
-import 'providers/providers_page.dart';
 import '../services/repositories/requests_repository.dart';
 import 'requests/new_request_page.dart';
 import 'requests/request_detail_page.dart';
@@ -30,9 +29,6 @@ const _authRoutes = {'/login', '/register', '/reset'};
 const _createPassword = '/create-password';
 
 int? _intParam(GoRouterState state, String name) => int.tryParse(state.uri.queryParameters[name] ?? '');
-
-/// La app es de citas y solicitudes. El directorio de proveedores es solo del personal.
-bool _blocked(String location, {required bool client}) => client && location == '/home/providers';
 
 /// Decide a dónde ir según la sesión. Pura para poder probarla sin widgets.
 /// [pendingVisit]: casa elegida en el sitio; sin sesión se pide crear cuenta y al entrar se abre su visita.
@@ -97,8 +93,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
       // Ya entró: el enlace del sitio o del correo no se vuelve a usar.
       if (target == '/home/requests') Future.microtask(ref.read(siteLinkProvider.notifier).clear);
-      // Un aviso o enlace a una pantalla que no le toca lo regresa a su inicio.
-      if (target == null && user != null && _blocked(state.matchedLocation, client: user.isClient)) return '/home';
       return target;
     },
     routes: [
@@ -118,8 +112,6 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: '/home',
               builder: (_, _) => const HomePage(),
               routes: [
-                // Personal: directorio de proveedores.
-                GoRoute(path: 'providers', builder: (_, _) => const ProvidersPage()),
                 // Solicitudes: cliente «Mis solicitudes» y «Busco casa»; personal, las del sitio y la app.
                 GoRoute(path: 'requests', builder: (_, _) => const RequestsPage()),
                 GoRoute(

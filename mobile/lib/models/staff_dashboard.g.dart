@@ -1,5 +1,10 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'staff_dashboard.dart';
 
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
 
 _StaffDashboard _$StaffDashboardFromJson(Map<String, dynamic> json) =>
     _StaffDashboard(

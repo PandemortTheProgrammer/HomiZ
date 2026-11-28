@@ -7,6 +7,7 @@ import '../../widgets/theme/app_spacing.dart';
 import '../../widgets/theme/app_text_styles.dart';
 import '../../services/utils/formatters.dart';
 import '../../widgets/common/cards.dart';
+import '../../widgets/common/collapsible_section.dart';
 import '../../widgets/common/confirm_dialog.dart';
 import '../../widgets/common/primary_button.dart';
 import '../../widgets/common/states.dart';
@@ -137,8 +138,13 @@ class _Detail extends ConsumerStatefulWidget {
 }
 
 class _DetailState extends ConsumerState<_Detail> {
-  bool _chatOpen = true;
   bool _cancelling = false;
+
+  static String _messagesSummary(List<AppointmentMessage>? list) {
+    if (list == null) return '';
+    if (list.isEmpty) return 'Sin mensajes todavía';
+    return '${list.length} ${list.length == 1 ? 'mensaje' : 'mensajes'} · «${list.last.body}»';
+  }
 
   Future<void> _cancel() async {
     final ok = await showConfirmDialog(
@@ -193,57 +199,66 @@ class _DetailState extends ConsumerState<_Detail> {
             const SizedBox(height: AppSpacing.sm),
             Text('Motivo: ${a.reason}', style: AppTextStyles.secondary.copyWith(fontSize: 13)),
           ],
-          const SizedBox(height: AppSpacing.xl),
-          Text('Ubicación', style: AppTextStyles.sectionTitle),
-          const SizedBox(height: AppSpacing.sm),
-          AppointmentLocationCard(appointment: a),
-          const SizedBox(height: AppSpacing.xl),
+          // Lo demás va en secciones plegables: cerradas muestran un resumen y no abruman.
+          const SizedBox(height: AppSpacing.lg),
+          const Divider(height: 1),
+          CollapsibleSection(
+            title: 'Ubicación',
+            summary: a.property.exactLocation && (a.property.address ?? '').isNotEmpty ? a.property.address : (a.property.zone ?? 'Zona por confirmar'),
+            child: AppointmentLocationCard(appointment: a),
+          ),
+          const Divider(height: 1),
           // La API solo envía el cliente al personal: así se distingue la vista.
           if (staff) ...[
-            Text(a.client?.kind == 'inquilino' ? 'Inquilino' : 'Prospecto', style: AppTextStyles.sectionTitle),
-            const SizedBox(height: AppSpacing.sm),
-            AppointmentClientCard(appointment: a),
+            CollapsibleSection(
+              title: a.client?.kind == 'inquilino' ? 'Inquilino' : 'Prospecto',
+              summary: [a.client?.name, a.client?.phone].whereType<String>().join(' · '),
+              child: AppointmentClientCard(appointment: a),
+            ),
+            const Divider(height: 1),
           ] else if (a.broker != null) ...[
             // Contacto mutuo: el cliente ve a su asesor
-            Text('Tu asesor', style: AppTextStyles.sectionTitle),
-            const SizedBox(height: AppSpacing.sm),
-            AppointmentAdvisorCard(appointment: a),
-            const SizedBox(height: AppSpacing.xl),
+            CollapsibleSection(
+              title: 'Tu asesor',
+              summary: [a.broker!.name, a.broker!.phone].whereType<String>().join(' · '),
+              child: AppointmentAdvisorCard(appointment: a),
+            ),
+            const Divider(height: 1),
           ],
           // El formulario que llenó (el personal lo ve completo; la persona, lo que ella escribió)
           if (a.lead case final lead?) ...[
-            if (staff) const SizedBox(height: AppSpacing.xl),
-            Text(staff ? (lead['linked'] == true ? 'Formulario que llenó' : 'Su solicitud más reciente') : 'Lo que nos contaste', style: AppTextStyles.sectionTitle),
-            const SizedBox(height: AppSpacing.sm),
-            RequestFormSections(request: LeadRequest.fromJson(lead), staff: staff),
-            // La persona corrige aquí mismo lo que nos contó
-            if (!staff && lead['status'] != 'cerrado') ...[
-              const SizedBox(height: AppSpacing.md),
-              OutlinedButton.icon(
-                onPressed: () => context.push('/home/requests/new', extra: LeadRequest.fromJson(lead)),
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Cambiar mi información'),
+            CollapsibleSection(
+              title: staff ? (lead['linked'] == true ? 'Formulario que llenó' : 'Su solicitud más reciente') : 'Lo que nos contaste',
+              summary: LeadRequest.fromJson(lead).reasonLabel,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  RequestFormSections(request: LeadRequest.fromJson(lead), staff: staff, open: true),
+                  // La persona corrige aquí mismo lo que nos contó
+                  if (!staff && lead['status'] != 'cerrado') ...[
+                    const SizedBox(height: AppSpacing.md),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/home/requests/new', extra: LeadRequest.fromJson(lead)),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Cambiar mi información'),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.md),
+                ],
               ),
-            ],
+            ),
+            const Divider(height: 1),
           ] else if (!staff) ...[
-            Text('Mis Datos', style: AppTextStyles.sectionTitle),
-            const SizedBox(height: AppSpacing.sm),
-            const MyDataCard(),
+            const CollapsibleSection(title: 'Mis datos', summary: 'Nombre, teléfono y correo', child: MyDataCard()),
+            const Divider(height: 1),
           ],
-          const SizedBox(height: AppSpacing.xl),
-          Row(
-            children: [
-              Expanded(child: Text('Mensajes de la cita', style: AppTextStyles.sectionTitle)),
-              if (!_chatOpen) TextButton(onPressed: () => setState(() => _chatOpen = true), child: const Text('Mostrar')),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          if (_chatOpen)
-            switch (messages) {
+          CollapsibleSection(
+            title: 'Mensajes de la cita',
+            summary: _messagesSummary(messages.value),
+            child: switch (messages) {
               AsyncData(:final value) => AppointmentChat(
                 messages: value,
                 enabled: a.acceptsMessages,
-                onClose: () => setState(() => _chatOpen = false),
                 onSend: (body) async {
                   try {
                     await ref.read(appointmentMessagesProvider(a.id).notifier).send(body);
@@ -259,6 +274,8 @@ class _DetailState extends ConsumerState<_Detail> {
               ),
               _ => const SizedBox(height: 160, child: LoadingState(items: 2, itemHeight: 48)),
             },
+          ),
+          const Divider(height: 1),
           if (!staff && a.isActive) ...[const SizedBox(height: AppSpacing.xl), PrimaryButton(label: 'Cancelar cita', variant: ButtonVariant.danger, loading: _cancelling, onPressed: _cancel)],
         ],
       ),

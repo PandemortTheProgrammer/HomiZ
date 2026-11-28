@@ -7,25 +7,23 @@ import '../theme/app_colors.dart';
 class HomizBottomNav extends StatelessWidget {
   const HomizBottomNav({super.key, required this.currentIndex, required this.onTap, this.showRequests = false, this.newRequests = 0});
 
-  /// Índice de la rama del router (0 Inicio, 1 Citas, 2 Solicitudes).
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  /// Pestaña «Solicitudes» (brokers y administración con leads.manage).
+  /// Tercera pestaña «Solicitudes» (brokers y administración con leads.manage).
   final bool showRequests;
 
   /// Solicitudes nuevas: número sobre el ícono de Solicitudes.
   final int newRequests;
 
-  static const _requestsBranch = 2;
+  static const _requests = (Icons.mark_email_unread_outlined, Icons.mark_email_unread_rounded, 'Solicitudes');
 
   @override
   Widget build(BuildContext context) {
-    // (rama del router, ícono, ícono activo, nombre)
     final items = [
-      (0, Icons.home_outlined, Icons.home_rounded, 'Inicio'),
-      (1, Icons.calendar_today_outlined, Icons.calendar_today_rounded, 'Citas'),
-      if (showRequests) (_requestsBranch, Icons.mark_email_unread_outlined, Icons.mark_email_unread_rounded, 'Solicitudes'),
+      (Icons.home_outlined, Icons.home_rounded, 'Inicio'),
+      (Icons.calendar_today_outlined, Icons.calendar_today_rounded, 'Citas'),
+      if (showRequests) _requests,
     ];
     return DecoratedBox(
       decoration: const BoxDecoration(color: AppColors.surface, boxShadow: [BoxShadow(color: AppColors.shadow, blurRadius: 8, offset: Offset(0, -2))]),
@@ -38,12 +36,12 @@ class HomizBottomNav extends StatelessWidget {
               for (var i = 0; i < items.length; i++)
                 Expanded(
                   child: _NavItem(
-                    icon: items[i].$2,
-                    activeIcon: items[i].$3,
-                    label: items[i].$4,
-                    selected: items[i].$1 == currentIndex,
-                    badge: items[i].$1 == _requestsBranch ? newRequests : 0,
-                    onTap: () => onTap(items[i].$1),
+                    icon: items[i].$1,
+                    activeIcon: items[i].$2,
+                    label: items[i].$3,
+                    selected: i == currentIndex,
+                    badge: items[i] == _requests ? newRequests : 0,
+                    onTap: () => onTap(i),
                   ),
                 ),
             ],

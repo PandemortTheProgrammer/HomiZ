@@ -14,7 +14,7 @@ import '../../services/providers/notifications_provider.dart';
 import '../../models/staff_dashboard.dart';
 import '../../services/providers/dashboard_provider.dart';
 
-/// Punto 13 · Inicio del personal: tarjetas de pendientes y accesos rápidos (citas, solicitudes y directorio).
+/// Punto 13 · Inicio del personal: citas por confirmar, resumen y solicitudes.
 class StaffHome extends ConsumerWidget {
   const StaffHome({super.key});
 
@@ -82,7 +82,6 @@ class StaffDashboardView extends StatelessWidget {
             ),
           ),
         ),
-        PrimaryButton(label: 'Directorio de proveedores', icon: Icons.engineering_outlined, variant: ButtonVariant.outline, onPressed: () => context.go('/home/providers')),
       ],
     );
   }
