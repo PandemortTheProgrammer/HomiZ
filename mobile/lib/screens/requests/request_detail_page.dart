@@ -119,15 +119,20 @@ class RequestDetailPage extends ConsumerWidget {
                   InfoNotice(text: locked ? '${label.endsWith('.') ? label : '$label.'} Puedes verla, pero aún no atenderla.' : label),
                   const SizedBox(height: AppSpacing.md),
                 ],
-                _BrokerCard(
-                  request: value,
-                  admin: admin,
-                  broker: broker,
-                  readOnly: locked,
-                  onTake: () => _run(context, () => actions.take(value.id), 'Tomaste esta solicitud. Ahora su seguimiento es tuyo.'),
-                  onAssign: (id, name) => _run(context, () => actions.assign(value.id, id), 'Solicitud asignada a $name. Le avisamos y su cita se va con $name.'),
-                ),
+                // Publicar u otro motivo: solo el dueño la atiende, por mensajes
+                if (value.ownerOnly)
+                  const InfoNotice(text: 'Solo tú (el dueño) ves y atiendes esta solicitud. Contéstale por mensajes aquí abajo; no lleva cita ni casas propuestas.')
+                else
+                  _BrokerCard(
+                    request: value,
+                    admin: admin,
+                    broker: broker,
+                    readOnly: locked,
+                    onTake: () => _run(context, () => actions.take(value.id), 'Tomaste esta solicitud. Ahora su seguimiento es tuyo.'),
+                    onAssign: (id, name) => _run(context, () => actions.assign(value.id, id), 'Solicitud asignada a $name. Le avisamos y su cita se va con $name.'),
+                  ),
               ],
+              if (!staff && value.ownerOnly) ...[const SizedBox(height: AppSpacing.md), const InfoNotice(text: 'Te atendemos por mensajes aquí mismo. Escríbenos y te contestamos en la app.')],
               const SizedBox(height: AppSpacing.md),
               RequestFormSections(request: value, staff: staff),
               // El cliente corrige lo que mandó mientras la solicitud siga abierta
@@ -165,7 +170,7 @@ class RequestDetailPage extends ConsumerWidget {
                   ),
                 ),
               ],
-              if (staff) ...[
+              if (staff && !value.ownerOnly) ...[
                 // Lo principal: pasar la solicitud a una cita
                 const SizedBox(height: AppSpacing.lg),
                 Text('Citas', style: AppTextStyles.cardTitle),
@@ -219,7 +224,9 @@ class RequestDetailPage extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
               const Divider(height: 1),
               CollapsibleSection(
-                title: staff ? 'Conversación con el cliente' : 'Mensajes con tu asesor',
+                title: staff ? 'Conversación con el cliente' : (value.ownerOnly ? 'Mensajes con Zugar' : 'Mensajes con tu asesor'),
+                // Publicar u otro motivo se atienden por aquí: la conversación empieza abierta
+                initiallyOpen: value.ownerOnly,
                 summary: messages == null
                     ? null
                     : messages.isEmpty
@@ -235,58 +242,62 @@ class RequestDetailPage extends ConsumerWidget {
                 ),
               ),
               const Divider(height: 1),
-              CollapsibleSection(
-                title: staff ? 'Casas propuestas' : 'Casas que te proponemos',
-                summary: value.proposals.isEmpty ? 'Ninguna todavía' : '${value.proposals.length} · ${value.proposals.map((p) => p.name).join(', ')}',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (value.proposals.isEmpty) ...[
-                      Text(staff ? 'Aún no le propones casas.' : 'Aún no hay casas propuestas. Si no tenemos una así, te la conseguimos.', style: AppTextStyles.secondary),
-                      const SizedBox(height: AppSpacing.md),
+              if (!value.ownerOnly) ...[
+                CollapsibleSection(
+                  title: staff ? 'Casas propuestas' : 'Casas que te proponemos',
+                  summary: value.proposals.isEmpty ? 'Ninguna todavía' : '${value.proposals.length} · ${value.proposals.map((p) => p.name).join(', ')}',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (value.proposals.isEmpty) ...[
+                        Text(staff ? 'Aún no le propones casas.' : 'Aún no hay casas propuestas. Si no tenemos una así, te la conseguimos.', style: AppTextStyles.secondary),
+                        const SizedBox(height: AppSpacing.md),
+                      ],
+                      for (final p in value.proposals) ...[
+                        ListCard(
+                          title: p.name,
+                          caption: '${Fmt.money(p.price)}${p.operation == 'renta' ? ' / mes' : ''}',
+                          subtitle: [
+                            '${p.zone}${p.city != null ? ', ${p.city!.split(',').first}' : ''}',
+                            '${p.rec} rec. · ${p.banos % 1 == 0 ? p.banos.toInt() : p.banos} baños',
+                            if (p.note != null) '«${p.note}»',
+                          ].join('\n'),
+                          trailing: locked
+                              ? null
+                              : staff
+                              ? IconButton(
+                                  tooltip: 'Quitar ${p.name}',
+                                  icon: const Icon(Icons.close_rounded, color: AppColors.danger),
+                                  onPressed: () async {
+                                    final ok = await showConfirmDialog(
+                                      context,
+                                      title: '¿Quitar ${p.name}?',
+                                      message: 'El cliente dejará de verla en sus propuestas.',
+                                      confirmLabel: 'Quitar',
+                                      destructive: true,
+                                    );
+                                    if (ok && context.mounted) await _run(context, () => actions.unpropose(value.id, p.id), '${p.name} se quitó de las propuestas.');
+                                  },
+                                )
+                              : const Icon(Icons.chevron_right_rounded),
+                          // El cliente agenda la visita de la casa propuesta
+                          onTap: staff ? null : () => context.push('/appointments/catalog/${p.propertyId}'),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                      ],
                     ],
-                    for (final p in value.proposals) ...[
-                      ListCard(
-                        title: p.name,
-                        caption: '${Fmt.money(p.price)}${p.operation == 'renta' ? ' / mes' : ''}',
-                        subtitle: [
-                          '${p.zone}${p.city != null ? ', ${p.city!.split(',').first}' : ''}',
-                          '${p.rec} rec. · ${p.banos % 1 == 0 ? p.banos.toInt() : p.banos} baños',
-                          if (p.note != null) '«${p.note}»',
-                        ].join('\n'),
-                        trailing: locked
-                            ? null
-                            : staff
-                            ? IconButton(
-                                tooltip: 'Quitar ${p.name}',
-                                icon: const Icon(Icons.close_rounded, color: AppColors.danger),
-                                onPressed: () async {
-                                  final ok = await showConfirmDialog(
-                                    context,
-                                    title: '¿Quitar ${p.name}?',
-                                    message: 'El cliente dejará de verla en sus propuestas.',
-                                    confirmLabel: 'Quitar',
-                                    destructive: true,
-                                  );
-                                  if (ok && context.mounted) await _run(context, () => actions.unpropose(value.id, p.id), '${p.name} se quitó de las propuestas.');
-                                },
-                              )
-                            : const Icon(Icons.chevron_right_rounded),
-                        // El cliente agenda la visita de la casa propuesta
-                        onTap: staff ? null : () => context.push('/appointments/catalog/${p.propertyId}'),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
+                const Divider(height: 1),
+              ],
               const SizedBox(height: AppSpacing.md),
               if (locked)
                 const SizedBox.shrink()
               else if (staff) ...[
-                PrimaryButton(label: 'Proponer una casa', icon: Icons.add_home_outlined, variant: ButtonVariant.outline, onPressed: () => _pickHouse(context, ref, value)),
-                const SizedBox(height: AppSpacing.lg),
+                if (!value.ownerOnly) ...[
+                  PrimaryButton(label: 'Proponer una casa', icon: Icons.add_home_outlined, variant: ButtonVariant.outline, onPressed: () => _pickHouse(context, ref, value)),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
                 Text('Seguimiento', style: AppTextStyles.cardTitle),
                 const SizedBox(height: AppSpacing.sm),
                 SegmentedButton<String>(
@@ -299,7 +310,7 @@ class RequestDetailPage extends ConsumerWidget {
                   showSelectedIcon: false,
                   onSelectionChanged: (s) => _run(context, () => actions.setStatus(value.id, s.first), 'Seguimiento actualizado.'),
                 ),
-              ] else ...[
+              ] else if (!value.ownerOnly) ...[
                 if (value.proposals.isNotEmpty) ...[
                   // Menú desplegable: el cliente elige cuál quiere visitar (una cita a la vez)
                   const SizedBox(height: AppSpacing.sm),

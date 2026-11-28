@@ -90,14 +90,19 @@ export async function insert(
 }
 
 /** brokerId: solo las solicitudes que administración le asignó. unassigned: solo las que aún no tienen broker. */
-export async function list(f: { brokerId?: string; unassigned?: boolean; status?: string; reason?: string; hidePoolNewerThan?: number; page: number; limit: number }): Promise<{ rows: LeadRow[]; total: number }> {
+export async function list(f: { brokerId?: string; unassigned?: boolean; status?: string; reason?: string; excludeReasons?: string[]; hidePoolNewerThan?: number; page: number; limit: number }): Promise<{ rows: LeadRow[]; total: number }> {
   const where: string[] = [];
   const params: unknown[] = [];
+  if (f.excludeReasons?.length) {
+    params.push(f.excludeReasons);
+    where.push(`l.reason::text <> ALL($${params.length}::text[])`);
+  }
   if (f.brokerId) {
     params.push(f.brokerId);
     where.push(`l.broker_id = $${params.length}`);
   }
-  if (f.unassigned) where.push('l.broker_id IS NULL');
+  // Publicar y otro motivo nunca se asignan a un broker: no cuentan como «sin asignar»
+  if (f.unassigned) where.push(`l.broker_id IS NULL AND l.reason NOT IN ('publicar', 'otro')`);
   if (f.hidePoolNewerThan !== undefined) {
     // Administración espera su turno en el pool. Las visitas con prioridad sí se ven, en solo lectura
     params.push(f.hidePoolNewerThan);

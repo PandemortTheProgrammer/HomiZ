@@ -11,7 +11,7 @@ import { dateTimeField, pagination, paged } from '../middlewares/validate.js';
 import { withTransaction, type Db } from '../config/database.js';
 import { isAdmin, isBroker, isOwner } from '../services/access.service.js';
 import * as Appointments from '../services/appointment.service.js';
-import { assertMayAct, hiddenFromAdmin, leadWindow, warnOwnerOfUnattended } from '../services/lead-window.service.js';
+import { assertMayAct, hiddenFromAdmin, leadWindow, OWNER_ONLY_REASONS, ownerIds, ownerOnly, warnOwnerOfUnattended } from '../services/lead-window.service.js';
 import { clientForLead, createLead } from '../services/lead.service.js';
 import { notify, staffWithPermission, userOfClient } from '../services/notification.service.js';
 import { photoUrl } from '../services/property.service.js';
@@ -87,6 +87,8 @@ const SYSTEM_FIELDS = ['origen', 'quiere', 'aviso_privacidad', 'fecha_preferida'
 
 const STATUS_TEXT = { nuevo: 'Recibida', en_seguimiento: 'En seguimiento', cerrado: 'Cerrada' } as const;
 
+const NO_VISITS = 'Las solicitudes para publicar una casa o de otro motivo se atienden por mensajes: no llevan cita ni casas propuestas.';
+
 async function presentProposals(rows: Leads.ProposalRow[]) {
   return Promise.all(rows.map(async (p) => ({
     id: p.id, leadId: p.lead_id, note: p.note, createdAt: p.created_at,
@@ -150,6 +152,8 @@ async function full(id: string) {
 async function loadForStaff(user: AuthUser, id: string): Promise<Leads.LeadRow> {
   const lead = await Leads.findById(id);
   if (!lead) throw new AppError(404, 'NOT_FOUND', 'La solicitud no existe.');
+  // Publicar u otro motivo: solo la dueña
+  if (ownerOnly(lead) && !isOwner(user)) throw new AppError(403, 'OWNER_ONLY', 'Esta solicitud la atiende directamente el dueño.');
   // Sin broker: la ven los brokers; administración, cuando le toca
   if (hiddenFromAdmin(user, lead)) throw new AppError(403, 'LEAD_ADMIN_WAIT', 'Esta solicitud aún no está disponible para administración.');
   if (!isAdmin(user) && lead.broker_id && lead.broker_id !== user.id) throw new AppError(403, 'NOT_OWNER', `Esta solicitud la atiende ${lead.broker_name ?? 'otro broker'}.`);
@@ -169,7 +173,8 @@ async function moveToBroker(db: Db, lead: Leads.LeadRow, brokerId: string, broke
 /** El primer broker que atiende una solicitud sin broker se queda con su seguimiento. Dos a la vez: gana el primero. */
 async function takeIfFree(user: AuthUser, lead: Leads.LeadRow): Promise<Leads.LeadRow> {
   assertMayAct(user, lead); // La prioridad de otro broker no se salta agendando, proponiendo o escribiendo
-  if (lead.broker_id || !isBroker(user)) return lead;
+  // Las de la dueña no pasan a ningún broker
+  if (lead.broker_id || !isBroker(user) || ownerOnly(lead)) return lead;
   await withTransaction(async (db) => {
     const { rowCount } = await db.query('UPDATE leads SET broker_id = $2 WHERE id = $1 AND broker_id IS NULL', [lead.id, user.id]);
     if (!rowCount) {
@@ -187,6 +192,7 @@ export const take: RequestHandler = async (_req, res) => {
   const user = currentUser(res);
   if (!isBroker(user)) throw new AppError(403, 'FORBIDDEN', 'Solo un broker puede atender una solicitud.');
   const lead = await loadForStaff(user, (res.locals.params as { id: string }).id);
+  if (ownerOnly(lead)) throw new AppError(400, 'OWNER_ONLY', 'Esta solicitud la atiende el dueño por mensajes; no se asigna a un broker.');
   await takeIfFree(user, lead);
   res.json(await full(lead.id));
 };
@@ -209,6 +215,8 @@ export const list: RequestHandler = async (_req, res) => {
     ...q,
     brokerId: isAdmin(user) || q.unassigned ? undefined : user.id,
     hidePoolNewerThan: isAdmin(user) && !isOwner(user) ? env.LEAD_ADMIN_WAIT_MINUTES : undefined,
+    // Publicar y otro motivo solo los ve la dueña
+    excludeReasons: isOwner(user) ? undefined : [...OWNER_ONLY_REASONS],
   });
   res.json(paged(rows.map((l) => present(l)), total, q));
 };
@@ -227,7 +235,7 @@ export const create: RequestHandler = async (_req, res) => {
   const { folio } = await createLead({
     reason: d.reason, name: d.name, email: d.email, phone: d.phone ?? null, message: d.message ?? null,
     propertyCode: d.propertyCode || undefined, payload: { ...(d.payload ?? {}), origen: 'panel' },
-    brokerId: isBroker(user) ? user.id : null,
+    brokerId: isBroker(user) && !ownerOnly(d) ? user.id : null,
   });
   const { rows } = await pool.query<{ id: string }>('SELECT id FROM leads WHERE folio = $1', [folio]);
   await insertActivity({ userId: user.id, entity: 'lead', entityId: rows[0].id, action: 'create', description: `${user.name} registró la solicitud ${folio} de ${d.name}.` });
@@ -264,6 +272,7 @@ export const schedule: RequestHandler = async (_req, res) => {
   const user = currentUser(res);
   const { id } = res.locals.params as { id: string };
   const lead = await takeIfFree(user, await loadForStaff(user, id));
+  if (ownerOnly(lead)) throw new AppError(400, 'OWNER_ONLY', NO_VISITS);
   const d = res.locals.body as z.infer<typeof appointmentDto>;
   if (d.agreed) await assertAgreedDate(lead, d.propertyId, d.scheduledAt);
   const { rows: open } = await pool.query<{ id: string; code: string; property_id: string }>(
@@ -300,6 +309,7 @@ export const assignBroker: RequestHandler = async (_req, res) => {
   if (!isAdmin(user)) throw new AppError(403, 'FORBIDDEN', 'Solo administración asigna brokers a las solicitudes.');
   const { id } = res.locals.params as { id: string };
   const lead = await loadForStaff(user, id);
+  if (ownerOnly(lead)) throw new AppError(400, 'OWNER_ONLY', 'Las solicitudes para publicar una casa o de otro motivo solo las atiende el dueño.');
   assertMayAct(user, lead);
   const { brokerId } = res.locals.body as z.infer<typeof brokerDto>;
   const { rows: [b] } = await pool.query<{ name: string }>(
@@ -348,6 +358,7 @@ export const addProposal: RequestHandler = async (_req, res) => {
   const user = currentUser(res);
   const { id } = res.locals.params as { id: string };
   const lead = await takeIfFree(user, await loadForStaff(user, id));
+  if (ownerOnly(lead)) throw new AppError(400, 'OWNER_ONLY', NO_VISITS);
   const d = res.locals.body as z.infer<typeof proposalDto>;
   const { rows: p } = await pool.query<{ name: string }>(`SELECT name FROM properties WHERE id = $1 AND active`, [d.propertyId]);
   if (!p[0]) throw new AppError(404, 'NOT_FOUND', 'La casa no existe.');
@@ -443,8 +454,8 @@ export const mineSend: RequestHandler = async (_req, res) => {
   );
   const lastStaff = await pool.query<{ sender_id: string }>('SELECT sender_id FROM lead_messages WHERE lead_id = $1 AND from_staff ORDER BY created_at DESC LIMIT 1', [lead.id]);
   const to = rows[0]?.broker_id ?? lastStaff.rows[0]?.sender_id ?? rows[0]?.responded_by;
-  // Sin broker asignado todavía: le llega a administración, que la asigna
-  const recipients = to ? [to] : await staffWithPermission('properties.reassign');
+  // Sin broker asignado todavía: le llega a administración, que la asigna. Publicar u otro: a la dueña
+  const recipients = ownerOnly(lead) ? await ownerIds() : to ? [to] : await staffWithPermission('properties.reassign');
   await notify(recipients, { type: 'lead_message', title: `Mensaje de ${user.name}`, message: `${lead.folio}: ${body.slice(0, 120)}`, entity: 'lead', entityId: lead.id });
   res.status(201).json({ data: await messagesOf(lead.id, user) });
 };
@@ -485,7 +496,7 @@ export const updateMine: RequestHandler = async (_req, res) => {
   const sent = Object.fromEntries(Object.entries(d.payload).filter(([k]) => !SYSTEM_FIELDS.includes(k)));
   await pool.query('UPDATE leads SET message = $2, payload = $3 WHERE id = $1', [id, d.message || null, { ...sent, ...kept }]);
   await insertActivity({ userId: user.id, entity: 'lead', entityId: id, action: 'update', description: `${user.name} corrigió los datos de su solicitud ${lead.folio}.` });
-  await notify(lead.broker_id ? [lead.broker_id] : await staffWithPermission('properties.reassign'), {
+  await notify(ownerOnly(lead) ? await ownerIds() : lead.broker_id ? [lead.broker_id] : await staffWithPermission('properties.reassign'), {
     type: 'lead_received', title: 'Solicitud actualizada', message: `${user.name} corrigió los datos de su solicitud ${lead.folio}.`, entity: 'lead', entityId: id,
   });
   res.json(forClient(present((await Leads.findById(id))!, await presentProposals(await Leads.proposalsFor([id])))));

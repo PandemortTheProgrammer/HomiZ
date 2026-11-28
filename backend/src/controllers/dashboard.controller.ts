@@ -27,7 +27,7 @@ async function clientDashboard(user: AuthUser) {
 
 async function staffDashboard(user: AuthUser) {
   // null = propietario (todo); lista = casas asignadas. Las citas se cuentan por broker asignado, igual que la lista de Citas.
-  const scope: Repo.StaffScope = { propertyIds: await propertyScope(user), userId: user.id, adminWaits: isAdmin(user) && !isOwner(user) };
+  const scope: Repo.StaffScope = { propertyIds: await propertyScope(user), userId: user.id, adminWaits: isAdmin(user) && !isOwner(user), owner: isOwner(user) };
   await warnOwnerOfUnattended();
   const counts = await Repo.staffCounts(scope);
   const [pendingAppointments, overdueNotes, newReports] = await Promise.all([

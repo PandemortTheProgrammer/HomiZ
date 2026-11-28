@@ -12,6 +12,8 @@ export interface StaffScope {
   userId: string;
   /** Administración (sin ser propietario) no cuenta las solicitudes que aún esperan su turno */
   adminWaits: boolean;
+  /** Solo la dueña cuenta las solicitudes para publicar una casa o de otro motivo */
+  owner: boolean;
 }
 
 const NO_CLIENT = '00000000-0000-0000-0000-000000000000';
@@ -88,7 +90,7 @@ export async function staffCounts(s: StaffScope) {
     overdueReceipts: await one(`SELECT count(*) AS n FROM receipts WHERE status = 'overdue' AND ${inScope('property_id')}`),
     pendingExpenses: await one(`SELECT count(*) AS n FROM expenses WHERE status = 'pending' AND ${inScope('property_id')}`),
     upcomingMaintenance: await one(`SELECT count(*) AS n FROM expenses WHERE next_maintenance_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 14 AND ${inScope('property_id')}`),
-    newLeads: await one(`SELECT count(*) AS n FROM leads WHERE status = 'nuevo' AND (property_id IS NULL OR ${inScope('property_id')})${adminWaits}`),
+    newLeads: await one(`SELECT count(*) AS n FROM leads WHERE status = 'nuevo' AND (property_id IS NULL OR ${inScope('property_id')})${adminWaits}${s.owner ? '' : ` AND reason NOT IN ('publicar', 'otro')`}`),
   };
 }
 

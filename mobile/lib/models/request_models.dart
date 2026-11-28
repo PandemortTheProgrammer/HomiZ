@@ -148,7 +148,10 @@ class LeadRequest {
     brokerName: (j['broker'] as Map<String, dynamic>?)?['name'] as String?,
     priorityBrokerId: (j['priority'] as Map<String, dynamic>?)?['brokerId'] as String?,
     priorityBrokerName: (j['priority'] as Map<String, dynamic>?)?['brokerName'] as String?,
-    priorityUntil: switch ((j['priority'] as Map<String, dynamic>?)?['until']) { final String u => Fmt.parse(u), _ => null },
+    priorityUntil: switch ((j['priority'] as Map<String, dynamic>?)?['until']) {
+      final String u => Fmt.parse(u),
+      _ => null,
+    },
     overdue: j['overdue'] as bool? ?? false,
     createdAt: Fmt.parse(j['createdAt'] as String),
   );
@@ -198,6 +201,9 @@ class LeadRequest {
   static const reasons = {'visita': 'Visita a una casa', 'rentar': 'Quiero rentar', 'comprar': 'Quiero comprar', 'publicar': 'Publicar mi casa', 'otro': 'Otro motivo'};
 
   String get reasonLabel => reasons[reason] ?? reason;
+
+  /// Publicar una casa u otro motivo: solo la atiende el dueño, por mensajes (sin citas ni casas propuestas).
+  bool get ownerOnly => reason == 'publicar' || reason == 'otro';
 
   /// «$15,000 · 3 rec. · Puerto Morelos»
   String get summary => [
