@@ -26,11 +26,6 @@ abstract class AppNotification with _$AppNotification {
   /// Ruta de la pantalla relacionada (null si no hay a dónde ir).
   String? get route => switch (entity) {
         'appointment' when entityId != null => '/appointments/$entityId',
-        'promissory_note' || 'payment' || 'receipt' => '/property?tab=2',
-        'maintenance_report' when entityId != null => '/property/maintenance/$entityId',
-        'document' => '/property?tab=1',
-        'property' || 'contract' => '/property',
-        'sale' => '/home/purchases',
         'lead' when entityId != null => '/home/requests/$entityId',
         _ => null,
       };

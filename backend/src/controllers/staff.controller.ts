@@ -1,15 +1,17 @@
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
-import { pool, withTransaction, type Db } from '../config/database.js';
+import { withTransaction } from '../config/database.js';
 import * as Users from '../models/user.model.js';
 import * as Tokens from '../models/token.model.js';
 import { insertActivity } from '../models/activity.model.js';
 import { currentUser } from '../middlewares/authenticate.js';
 import { AppError } from '../middlewares/error-handler.js';
 import { emailField, nameField, pagination, paged } from '../middlewares/validate.js';
+import * as Repo from '../repositories/staff.repository.js';
 import { hashPassword, passwordSchema } from '../services/password.service.js';
 
-/* Roles que el propietario asigna: broker, administrador o ambos. El rol «owner» (propietario) no se asigna por la API. */
+/* Controlador de /users (personal). El SQL vive en repositories/staff.repository.ts.
+   Roles que el propietario asigna: broker, administrador o ambos. El rol «owner» (propietario) no se asigna por la API. */
 const ROLE = z.enum(['broker', 'admin']);
 
 export const listQueryDto = pagination.extend({
@@ -39,54 +41,19 @@ export const updateDto = z
 export const rolePermissionsDto = z.object({ permissions: z.array(z.string().max(60)).max(50) });
 export const roleParam = z.object({ code: ROLE });
 
-interface StaffRow {
-  id: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  initials: string | null;
-  zones: string | null;
-  specialty: string | null;
-  active: boolean;
-  roles: string[];
-  properties: number;
-  locked_until: Date | null;
-  created_at: Date;
-}
-
-const SELECT = `
-  SELECT u.id, u.name, u.email, u.phone, u.initials, u.zones, u.specialty, u.active, u.locked_until, u.created_at,
-         COALESCE(array_agg(DISTINCT r.code) FILTER (WHERE r.code IS NOT NULL), '{}') AS roles,
-         (SELECT count(*)::int FROM properties p WHERE p.broker_id = u.id AND p.active) AS properties
-    FROM users u
-    LEFT JOIN user_roles ur ON ur.user_id = u.id
-    LEFT JOIN roles r ON r.id = ur.role_id`;
+type StaffRow = Repo.StaffRow;
 
 const present = (s: StaffRow) => ({
   id: s.id, name: s.name, email: s.email, phone: s.phone, initials: s.initials, zones: s.zones, specialty: s.specialty,
   active: s.active, roles: s.roles, properties: s.properties, locked: !!s.locked_until && s.locked_until.getTime() > Date.now(), createdAt: s.created_at,
 });
 
-async function findStaff(id: string): Promise<StaffRow | null> {
-  const { rows } = await pool.query<StaffRow>(`${SELECT} WHERE u.id = $1 AND u.type = 'staff' GROUP BY u.id`, [id]);
-  return rows[0] ?? null;
-}
-
-/** Cambia broker/administrador; el rol de propietario se conserva. */
-async function setRoles(db: Db, userId: string, roles: string[]) {
-  await db.query(`DELETE FROM user_roles WHERE user_id = $1 AND role_id IN (SELECT id FROM roles WHERE code IN ('broker', 'admin'))`, [userId]);
-  await db.query('INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE code = ANY($2::text[])', [userId, roles]);
-}
+const findStaff = Repo.findStaff;
+const setRoles = Repo.setRoles;
 
 export const list: RequestHandler = async (_req, res) => {
   const q = res.locals.query as z.infer<typeof listQueryDto>;
-  const where = [`u.type = 'staff'`];
-  const params: unknown[] = [];
-  if (q.active !== undefined) where.push(`u.active = $${params.push(q.active)}`);
-  if (q.q) where.push(`(u.name ILIKE $${params.push(`%${q.q}%`)} OR u.email ILIKE $${params.length})`);
-  const having = q.role ? `HAVING $${params.push(q.role)} = ANY(array_agg(r.code))` : '';
-  const sql = `${SELECT} WHERE ${where.join(' AND ')} GROUP BY u.id ${having} ORDER BY u.name`;
-  const { rows } = await pool.query<StaffRow>(sql, params);
+  const rows = await Repo.list({ role: q.role, active: q.active, q: q.q });
   const start = (q.page - 1) * q.limit;
   res.json(paged(rows.slice(start, start + q.limit).map(present), rows.length, q));
 };
@@ -98,7 +65,7 @@ export const create: RequestHandler = async (_req, res) => {
   const passwordHash = await hashPassword(d.password);
   const id = await withTransaction(async (db) => {
     const u = await Users.createUser({ name: d.name, email: d.email, phone: d.phone ?? null, passwordHash, type: 'staff' }, db);
-    await db.query('UPDATE users SET zones = $2, specialty = $3 WHERE id = $1', [u.id, d.zones ?? null, d.specialty ?? null]);
+    await Repo.setZones(db, u.id, d.zones ?? null, d.specialty ?? null);
     await setRoles(db, u.id, d.roles);
     await insertActivity({ userId: admin.id, entity: 'user', entityId: u.id, action: 'create', description: `${admin.name} dio de alta a ${d.name} (${d.roles.join(' y ')}).` }, db);
     return u.id;
@@ -119,15 +86,7 @@ export const update: RequestHandler = async (_req, res) => {
     throw new AppError(409, 'HAS_PROPERTIES', `Tiene ${before.properties} casas asignadas. Reasígnalas antes de quitarle el rol de broker.`);
   }
   await withTransaction(async (db) => {
-    await db.query(
-      `UPDATE users SET name = COALESCE($2, name),
-              phone = CASE WHEN $3::boolean THEN $4 ELSE phone END,
-              zones = CASE WHEN $5::boolean THEN $6 ELSE zones END,
-              specialty = CASE WHEN $7::boolean THEN $8 ELSE specialty END,
-              active = COALESCE($9, active)
-        WHERE id = $1`,
-      [id, d.name ?? null, d.phone !== undefined, d.phone ?? null, d.zones !== undefined, d.zones ?? null, d.specialty !== undefined, d.specialty ?? null, d.active ?? null],
-    );
+    await Repo.update(db, id, d);
     if (d.roles) await setRoles(db, id, d.roles);
     if (d.active === false) await Tokens.revokeAllForUser(id, db);
     await insertActivity({
@@ -139,13 +98,7 @@ export const update: RequestHandler = async (_req, res) => {
 };
 
 export const listRoles: RequestHandler = async (_req, res) => {
-  const { rows } = await pool.query<{ code: string; name: string; permissions: string[] }>(
-    `SELECT r.code, r.name, COALESCE(array_agg(p.code ORDER BY p.code) FILTER (WHERE p.code IS NOT NULL), '{}') AS permissions
-       FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id LEFT JOIN permissions p ON p.id = rp.permission_id
-      GROUP BY r.id ORDER BY r.code`,
-  );
-  const perms = await pool.query<{ code: string; description: string }>('SELECT code, description FROM permissions ORDER BY code');
-  res.json({ roles: rows, permissions: perms.rows });
+  res.json(await Repo.rolesWithPermissions());
 };
 
 /** Permisos configurables de broker y administrador. Gestionar al personal (users.manage) es solo del propietario. */
@@ -155,16 +108,11 @@ export const setRolePermissions: RequestHandler = async (_req, res) => {
   const { permissions } = res.locals.body as z.infer<typeof rolePermissionsDto>;
   const wanted = new Set(permissions);
   wanted.delete('users.manage');
-  const known = await pool.query<{ code: string }>('SELECT code FROM permissions WHERE code = ANY($1::text[])', [[...wanted]]);
-  const unknown = [...wanted].filter((p) => !known.rows.some((k) => k.code === p));
+  const known = await Repo.existingPermissions([...wanted]);
+  const unknown = [...wanted].filter((p) => !known.includes(p));
   if (unknown.length) throw new AppError(400, 'VALIDATION_ERROR', 'Hay permisos que no existen.', { permissions: unknown });
   await withTransaction(async (db) => {
-    await db.query('DELETE FROM role_permissions WHERE role_id = (SELECT id FROM roles WHERE code = $1)', [code]);
-    await db.query(
-      `INSERT INTO role_permissions (role_id, permission_id)
-       SELECT r.id, p.id FROM roles r, permissions p WHERE r.code = $1 AND p.code = ANY($2::text[])`,
-      [code, [...wanted]],
-    );
+    await Repo.replaceRolePermissions(db, code, [...wanted]);
     await insertActivity({ userId: admin.id, entity: 'role', action: 'permissions', description: `${admin.name} actualizó los permisos del rol ${code}.`, newValues: [...wanted] }, db);
   });
   res.json({ code, permissions: [...wanted].sort() });

@@ -75,7 +75,7 @@ class _RequestsPageState extends ConsumerState<RequestsPage> {
                       title: staff ? '${r.name ?? ''} · ${r.folio}' : '${r.reasonLabel} · ${r.folio}',
                       subtitle: [
                         if (staff) r.reasonLabel,
-                        if (staff) r.priorityLabel ?? r.brokerName ?? 'Sin broker asignado',
+                        if (staff) r.ownerOnly ? 'Solo el dueño' : r.priorityLabel ?? r.brokerName ?? 'Sin broker asignado',
                         if (staff && r.overdue) 'Sin atender',
                         r.propertyName ?? r.summary,
                         Fmt.dayMonthShort(r.createdAt),

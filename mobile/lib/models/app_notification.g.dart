@@ -1,5 +1,10 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'app_notification.dart';
 
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
 
 _AppNotification _$AppNotificationFromJson(Map<String, dynamic> json) =>
     _AppNotification(

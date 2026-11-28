@@ -11,7 +11,7 @@ export const LEGAL = {
   rfc: 'POR CONFIRMAR',
   address: 'Cancún, Quintana Roo, México (domicilio completo POR CONFIRMAR)',
   /** Correo para derechos ARCO, revocación del consentimiento y dudas de privacidad */
-  privacyEmail: 'hola@zugar.mx',
+  privacyEmail: 'urielagz2530@gmail.com',
   phone: '+52 998 555 0142',
 };
 

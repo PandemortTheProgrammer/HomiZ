@@ -462,8 +462,7 @@ CREATE TABLE activity_log (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX activity_log_property_idx ON activity_log (property_id, created_at DESC);
-CREATE I
-NDEX activity_log_created_idx ON activity_log (created_at DESC);
+CREATE INDEX activity_log_created_idx ON activity_log (created_at DESC);
 
 CREATE FUNCTION activity_log_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

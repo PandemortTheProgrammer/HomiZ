@@ -143,7 +143,11 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
     final a = _amount(_min.text), b = _amount(_max.text);
     final unit = _reason == 'comprar' ? ' MXN' : ' MXN / mes';
     if (a != null && b != null) return '${_fmt(a)} – ${_fmt(b)}$unit';
-    return b != null ? 'Hasta ${_fmt(b)}$unit' : a != null ? 'Desde ${_fmt(a)}$unit' : '';
+    return b != null
+        ? 'Hasta ${_fmt(b)}$unit'
+        : a != null
+        ? 'Desde ${_fmt(a)}$unit'
+        : '';
   }
 
   Future<void> _pickDate() async {
@@ -164,34 +168,34 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
   }
 
   Map<String, Object?> get _payload => {
-        if (_looking) ...{
-          'operacion': _reason == 'comprar' ? 'compra' : 'renta',
-          'tipo_inmueble': _type,
-          'zona': _place.text,
-          'presupuesto': _budgetLabel(),
-          'presupuesto_min': _amount(_min.text),
-          'presupuesto_max': _amount(_max.text),
-          'recamaras': _rooms,
-          'banos': _baths,
-          'personas': _people,
-          'mascotas': _pets ? 'si' : 'no',
-          'mascotas_detalle': _pets ? _petsDetail.text : null,
-          'mudanza': _moveInWhen,
-          if (_reason == 'rentar') ...{'nacionalidad': _nationality.text, 'ocupacion': _job.text, 'plazo_renta': _term},
-          if (_reason == 'comprar') 'forma_pago': _pay,
-        },
-        if (_reason == 'publicar') ...{
-          'inmueble_tipo': _type ?? 'Casa',
-          'inmueble_operacion': _publishOp,
-          'inmueble_zona': _place.text,
-          'inmueble_recamaras': _rooms,
-          'inmueble_banos': _publishBaths,
-          'inmueble_m2': _amount(_meters.text),
-          'inmueble_disponible': _availableWhen,
-          'inmueble_precio': _amount(_price.text),
-        },
-        if (_reason == 'otro') 'asunto': _subject,
-      };
+    if (_looking) ...{
+      'operacion': _reason == 'comprar' ? 'compra' : 'renta',
+      'tipo_inmueble': _type,
+      'zona': _place.text,
+      'presupuesto': _budgetLabel(),
+      'presupuesto_min': _amount(_min.text),
+      'presupuesto_max': _amount(_max.text),
+      'recamaras': _rooms,
+      'banos': _baths,
+      'personas': _people,
+      'mascotas': _pets ? 'si' : 'no',
+      'mascotas_detalle': _pets ? _petsDetail.text : null,
+      'mudanza': _moveInWhen,
+      if (_reason == 'rentar') ...{'nacionalidad': _nationality.text, 'ocupacion': _job.text, 'plazo_renta': _term},
+      if (_reason == 'comprar') 'forma_pago': _pay,
+    },
+    if (_reason == 'publicar') ...{
+      'inmueble_tipo': _type ?? 'Casa',
+      'inmueble_operacion': _publishOp,
+      'inmueble_zona': _place.text,
+      'inmueble_recamaras': _rooms,
+      'inmueble_banos': _publishBaths,
+      'inmueble_m2': _amount(_meters.text),
+      'inmueble_disponible': _availableWhen,
+      'inmueble_precio': _amount(_price.text),
+    },
+    if (_reason == 'otro') 'asunto': _subject,
+  };
 
   Future<void> _submit(String? slug) async {
     if (!_form.currentState!.validate()) return setState(() => _error = 'Revisa los campos marcados en rojo.');
@@ -223,7 +227,9 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
     });
     String two(int n) => n.toString().padLeft(2, '0');
     try {
-      final r = await ref.read(requestActionsProvider).create(
+      final r = await ref
+          .read(requestActionsProvider)
+          .create(
             reason: _reason,
             message: _message.text,
             propertySlug: _looking ? slug : null,
@@ -233,11 +239,17 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
           );
       if (!mounted) return;
       ref.invalidate(appointmentsProvider);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(withVisit
-            ? 'Listo: pedimos tu cita (folio ${r.folio}). Te avisaremos aquí cuando tu asesor la confirme.'
-            : 'Recibimos tu solicitud (folio ${r.folio}). Tu asesor te contestará aquí.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            withVisit
+                ? 'Listo: pedimos tu cita (folio ${r.folio}). Te avisaremos aquí cuando tu asesor la confirme.'
+                : _reason == 'publicar' || _reason == 'otro'
+                ? 'Recibimos tu solicitud (folio ${r.folio}). Te contestamos por mensajes aquí.'
+                : 'Recibimos tu solicitud (folio ${r.folio}). Tu asesor te contestará aquí.',
+          ),
+        ),
+      );
       if (withVisit) {
         context.go('/appointments');
       } else {
@@ -251,51 +263,59 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
   }
 
   Widget _choice(String label, List<(String, String)> options, String value, ValueChanged<String> onChanged) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(label, style: AppTextStyles.label),
-          const SizedBox(height: AppSpacing.sm),
-          SegmentedButton<String>(
-            segments: [for (final (v, t) in options) ButtonSegment(value: v, label: Text(t))],
-            selected: {value},
-            showSelectedIcon: false,
-            onSelectionChanged: _loading ? null : (s) => onChanged(s.first),
-          ),
-          const SizedBox(height: AppSpacing.md),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(label, style: AppTextStyles.label),
+      const SizedBox(height: AppSpacing.sm),
+      SegmentedButton<String>(
+        segments: [for (final (v, t) in options) ButtonSegment(value: v, label: Text(t))],
+        selected: {value},
+        showSelectedIcon: false,
+        onSelectionChanged: _loading ? null : (s) => onChanged(s.first),
+      ),
+      const SizedBox(height: AppSpacing.md),
+    ],
+  );
 
   /// Título de cada parte del formulario, como los bloques del sitio
   Widget _section(String title) => Padding(
-        padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.md),
-        child: Text(title, style: AppTextStyles.sectionTitle),
-      );
+    padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.md),
+    child: Text(title, style: AppTextStyles.sectionTitle),
+  );
 
   /// Lista opcional: «Sin definir» deja el dato vacío
   Widget _optional(String label, List<String> options, String? value, ValueChanged<String?> onChanged) => Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-        child: DropdownButtonFormField<String?>(
-          initialValue: value,
-          isExpanded: true,
-          decoration: InputDecoration(labelText: label),
-          items: [
-            const DropdownMenuItem<String?>(value: null, child: Text('Sin definir')),
-            for (final o in options) DropdownMenuItem<String?>(value: o, child: Text(o, overflow: TextOverflow.ellipsis)),
-          ],
-          onChanged: _loading ? null : onChanged,
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+    child: DropdownButtonFormField<String?>(
+      initialValue: value,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label),
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('Sin definir')),
+        for (final o in options)
+          DropdownMenuItem<String?>(
+            value: o,
+            child: Text(o, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: _loading ? null : onChanged,
+    ),
+  );
 
   Widget _typeField({required bool any}) => DropdownButtonFormField<String?>(
-        initialValue: _type,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Tipo de inmueble'),
-        items: [
-          if (any) const DropdownMenuItem<String?>(value: null, child: Text('Cualquiera')),
-          for (final (group, name) in propertyTypes) DropdownMenuItem<String?>(value: name, child: Text('$name · $group', overflow: TextOverflow.ellipsis)),
-        ],
-        onChanged: _loading ? null : (v) => setState(() => _type = v),
-      );
+    initialValue: _type,
+    isExpanded: true,
+    decoration: const InputDecoration(labelText: 'Tipo de inmueble'),
+    items: [
+      if (any) const DropdownMenuItem<String?>(value: null, child: Text('Cualquiera')),
+      for (final (group, name) in propertyTypes)
+        DropdownMenuItem<String?>(
+          value: name,
+          child: Text('$name · $group', overflow: TextOverflow.ellipsis),
+        ),
+    ],
+    onChanged: _loading ? null : (v) => setState(() => _type = v),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +330,15 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
     // Con una casa elegida la zona ya se conoce
     final hasHouse = house != null || widget.editing?.propertyName != null;
     return Scaffold(
-      appBar: AppBar(title: Text(editing ? 'Editar mi información' : widget.welcome ? 'Bienvenido a Homiz' : 'Nueva solicitud')),
+      appBar: AppBar(
+        title: Text(
+          editing
+              ? 'Editar mi información'
+              : widget.welcome
+              ? 'Bienvenido a Homiz'
+              : 'Nueva solicitud',
+        ),
+      ),
       body: Form(
         autovalidateMode: AutovalidateMode.onUserInteraction,
         key: _form,
@@ -322,10 +350,11 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
             children: [
               Text(editing ? 'Corrige lo que mandaste' : '¿Qué quieres hacer?', style: AppTextStyles.pageTitle),
               const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Cuéntanos qué buscas y tu asesor te propondrá propiedades aquí en la app. Tus datos de contacto ya los tenemos de tu cuenta.',
-                style: AppTextStyles.secondary.copyWith(fontSize: 13),
-              ),
+              Text(switch (_reason) {
+                'publicar' => 'Cuéntanos de tu propiedad y te contestamos por mensajes aquí en la app. Tus datos de contacto ya los tenemos de tu cuenta.',
+                'otro' => 'Cuéntanos en qué te ayudamos y te contestamos por mensajes aquí en la app. Tus datos de contacto ya los tenemos de tu cuenta.',
+                _ => 'Cuéntanos qué buscas y tu asesor te propondrá propiedades aquí en la app. Tus datos de contacto ya los tenemos de tu cuenta.',
+              }, style: AppTextStyles.secondary.copyWith(fontSize: 13)),
               const SizedBox(height: AppSpacing.lg),
               Wrap(
                 spacing: AppSpacing.sm,
@@ -354,7 +383,9 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
                       if (_visit)
                         Row(
                           children: [
-                            Expanded(child: OutlinedButton.icon(onPressed: _loading ? null : _pickDate, icon: const Icon(Icons.event_outlined), label: Text(_date == null ? 'Día' : Fmt.dayMonth(_date!)))),
+                            Expanded(
+                              child: OutlinedButton.icon(onPressed: _loading ? null : _pickDate, icon: const Icon(Icons.event_outlined), label: Text(_date == null ? 'Día' : Fmt.dayMonth(_date!))),
+                            ),
                             const SizedBox(width: AppSpacing.sm),
                             Expanded(
                               child: OutlinedButton.icon(
@@ -504,13 +535,21 @@ class _NewRequestPageState extends ConsumerState<NewRequestPage> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                  child: Semantics(liveRegion: true, child: Text(_error!, style: AppTextStyles.secondary.copyWith(color: AppColors.danger, fontSize: 13))),
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(_error!, style: AppTextStyles.secondary.copyWith(color: AppColors.danger, fontSize: 13)),
+                  ),
                 ),
-              PrimaryButton(label: editing ? 'Guardar cambios' : slug != null && _looking && _visit ? 'Enviar y pedir mi cita' : 'Enviar solicitud', loading: _loading, onPressed: () => _submit(slug)),
-              if (widget.welcome) ...[
-                const SizedBox(height: AppSpacing.sm),
-                TextButton(onPressed: _loading ? null : () => context.go('/home'), child: const Text('Ahora no, ver la app')),
-              ],
+              PrimaryButton(
+                label: editing
+                    ? 'Guardar cambios'
+                    : slug != null && _looking && _visit
+                    ? 'Enviar y pedir mi cita'
+                    : 'Enviar solicitud',
+                loading: _loading,
+                onPressed: () => _submit(slug),
+              ),
+              if (widget.welcome) ...[const SizedBox(height: AppSpacing.sm), TextButton(onPressed: _loading ? null : () => context.go('/home'), child: const Text('Ahora no, ver la app'))],
             ],
           ),
         ),

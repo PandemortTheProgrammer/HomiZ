@@ -1,8 +1,21 @@
+import java.util.Base64
+import java.util.Properties
+
 plugins {
     id("com.android.application")
+    id("com.google.gms.google-services") // Firebase: avisos push
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Llave de firma de la versión para tiendas: android/key.properties (NUNCA se sube a git, ver .gitignore).
+// Contiene storeFile, storePassword, keyAlias y keyPassword. Sin ese archivo, la versión final no se firma
+// con la llave de pruebas: la compilación de release falla con un mensaje que explica qué falta.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("key.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val hasReleaseKey = keystoreProperties.getProperty("storeFile") != null
 
 android {
     namespace = "mx.zugar.homiz"
@@ -15,26 +28,65 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "mx.zugar.homiz"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (hasReleaseKey) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            // Código reducido y ofuscado (R8) y sin recursos sin usar
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+    }
+}
+
+// API_URL que Flutter pasa con --dart-define (llega en base64, separado por comas, en -Pdart-defines)
+val apiUrl: String = run {
+    val raw: String = project.findProperty("dart-defines")?.toString() ?: ""
+    var found = ""
+    for (part: String in raw.split(",")) {
+        if (part.isBlank()) continue
+        val define: String = Base64.getDecoder().decode(part).toString(Charsets.UTF_8)
+        if (define.startsWith("API_URL=")) found = define.removePrefix("API_URL=")
+    }
+    found
+}
+
+// La versión de release no se firma con la llave de pruebas ni apunta a un servidor de desarrollo:
+// si falta algo, se detiene con instrucciones (Google rechaza una app que no funciona)
+gradle.taskGraph.whenReady {
+    if (allTasks.none { it.name.contains("Release") && (it.name.startsWith("assemble") || it.name.startsWith("bundle")) }) return@whenReady
+    if (!hasReleaseKey) {
+        throw GradleException(
+            "Falta android/key.properties con la llave de firma de la app (ver docs/produccion.md). " +
+                "La versión para la tienda no se firma con la llave de pruebas.",
+        )
+    }
+    val dev = Regex("localhost|127\\.0\\.0\\.1|10\\.0\\.2\\.2|192\\.168\\.|trycloudflare\\.com|devtunnels\\.ms", RegexOption.IGNORE_CASE)
+    if (!apiUrl.startsWith("https://") || dev.containsMatchIn(apiUrl)) {
+        throw GradleException(
+            "La versión para la tienda necesita la API de producción en HTTPS. Compila con " +
+                "--dart-define=API_URL=https://<tu-servidor>/api/v1 (ver docs/produccion.md). Recibido: '" + apiUrl + "'.",
+        )
     }
 }
 

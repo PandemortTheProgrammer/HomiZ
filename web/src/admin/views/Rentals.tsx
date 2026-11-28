@@ -10,16 +10,24 @@ import { PropertyDossier } from './Dossier';
 import { SaleForm, SalesPanel } from './Sales';
 import { NeedsServer, PropertyPayments, useApiData } from './Payments';
 
+/* ==========================================================================
+   Rentas: cada casa rentada con su inquilino en una tarjeta (al día o con adeudo, pagarés, reportes).
+   Al abrirla, todo en pestañas: Contrato · Pagarés y pagos · Mantenimiento · Expediente · Agua y luz.
+   ========================================================================== */
 const S = { tab: 'active', selected: '' as string, detail: 'contrato' };
 const DETAIL: [string, string][] = [['contrato', 'Contrato'], ['pagos', 'Pagarés y pagos'], ['mantenimiento', 'Reportes'], ['expediente', 'Expediente'], ['servicios', 'Agua, luz y mantenimiento']];
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
+/**
+ * Calendario del mes: en cada día, lo que toca en las casas rentadas (renta, cuota de mantenimiento,
+ * revisar agua y luz). Los mismos días en que la tarea diaria manda los avisos.
+ */
 function RentCalendar({ rows, onOpen }: { rows: Rental[]; onOpen: (id: string) => void }) {
   const [ym, setYm] = useState(Z.TODAY.slice(0, 7));
   const [y, m] = ym.split('-').map(Number);
   const first = new Date(y, m - 1, 1);
   const days = new Date(y, m, 0).getDate();
-  const offset = (first.getDay() + 6) % 7;
+  const offset = (first.getDay() + 6) % 7; // lunes primero
   const shift = (n: number) => { const d = new Date(y, m - 1 + n, 1); setYm(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); };
   const inPeriod = (r: Rental, day: number) => { const iso = `${ym}-${String(day).padStart(2, '0')}`; return iso >= r.startDate && iso <= r.endDate; };
   const events = (day: number) => rows.filter((r) => r.status === 'active' && inPeriod(r, day)).flatMap((r) => [
@@ -65,16 +73,22 @@ const PRIORITY: Record<string, string> = { low: 'Baja', medium: 'Media', high: '
 const failMsg = (e: unknown) => (e as ApiFailure)?.mensaje || 'No se pudo guardar. Inténtalo de nuevo.';
 const year = (iso: string) => iso.slice(0, 4);
 
+/** Al día / con adeudo, para la tarjeta y el encabezado */
 function PayBadge({ r }: { r: Rental }) {
   if (r.status !== 'active') return <Badge label={r.status === 'finished' ? 'Finalizado' : 'Cancelado'} tone="gris" />;
   return r.notes.overdue ? <Badge label={`${r.notes.overdue} ${plural(r.notes.overdue, 'vencido', 'vencidos')} · ${money(r.notes.owed)}`} tone="error" /> : <Badge label="Al día" tone="ok" />;
 }
 
+/**
+ * «Rentar una casa» / «Hacer inquilino»: elige la casa en renta y a la persona (lo que ya se sabe viene elegido);
+ * después, el mismo formulario de contrato. Se abre desde Rentas, desde la persona y desde la casa.
+ */
 export function openRental(open: ReturnType<typeof useOverlay>['open'], onDone: (m: string) => void, pre: { property?: string; person?: string } = {}) {
-
+  // Un solo formulario: cliente, casa (ya sugerida) y contrato
   open((close) => <TenantForm a={pre} close={close} onDone={onDone} />, { wide: true });
 }
 
+/** Finalizar el contrato: los pagarés futuros sin pagar se cancelan (no se borran) y la casa vuelve a estar disponible. */
 function FinishForm({ r, close, onDone }: { r: Rental; close: () => void; onDone: (m: string) => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -105,6 +119,7 @@ function FinishForm({ r, close, onDone }: { r: Rental; close: () => void; onDone
   );
 }
 
+/** Mantenimiento de la casa: reportes del inquilino, su historial, fotos y el cambio de estado (con proveedor). */
 function Maintenance({ propertyId }: { propertyId: string }) {
   const { toast } = useOverlay();
   const list = useApiData(() => Rentals.reports(propertyId), [propertyId]);
@@ -250,6 +265,7 @@ function Detail({ r, onChanged }: { r: Rental; onChanged: () => void }) {
   );
 }
 
+/** Sección «Rentas y ventas» del menú: arriba se cambia entre Rentas y Ventas (?modo=ventas) */
 export function RentalsPage() {
   const { open, toast } = useOverlay();
   const [params, setParams] = useSearchParams();
@@ -276,7 +292,7 @@ function RentalsList({ switcher }: { switcher: React.ReactNode }) {
   const { open, toast } = useOverlay();
   const [tab, setTab] = useState(S.tab);
   const [selected, setSelected] = useState(S.selected);
-
+  // El calendario usa las rentas vigentes
   const list = useApiData(() => Rentals.list(tab === 'all' ? '' : tab === 'calendario' ? 'active' : tab), [tab]);
   const rows = list.data ?? [];
   const active = rows.filter((r) => r.status === 'active');

@@ -1,5 +1,10 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'appointment.dart';
 
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
 
 _Appointment _$AppointmentFromJson(Map<String, dynamic> json) => _Appointment(
   id: json['id'] as String,

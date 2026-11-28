@@ -146,7 +146,7 @@ export function VisitRequest() {
           <h3 id="hablar-titulo">¿Prefieres hablar?</h3>
           <ul className="side-card__list">
             <li><a href="tel:+529985550142"><Icon id="phone" />+52 998 555 0142</a></li>
-            <li><a href="mailto:hola@zugar.mx"><Icon id="mail" />hola@zugar.mx</a></li>
+            <li><a href="mailto:urielagz2530@gmail.com"><Icon id="mail" />urielagz2530@gmail.com</a></li>
             <li><span><Icon id="clock" />Lun–vie 9:00–18:00 · Sáb 10:00–14:00</span></li>
           </ul>
           <p className="side-card__note">No tenemos oficina física: te atendemos por teléfono, WhatsApp y directamente en cada casa.</p>

@@ -72,7 +72,7 @@ const schema = z.object({
   })
   /* Producción: nada de configuración de pruebas (ver docs/produccion.md) */
   .refine((e) => e.NODE_ENV !== 'production' || !e.CORS_ORIGINS.includes('*'), {
-    message: 'En producción CORS_ORIGINS lleva los dominios exactos (sin «*»), p. ej. https://zugar.mx,https://app.zugar.mx',
+    message: 'En producción CORS_ORIGINS lleva los dominios exactos (sin «*»), p. ej. https://zugar.com.mx,https://app.zugar.com.mx',
   })
   .refine((e) => e.NODE_ENV !== 'production' || /^https:\/\//.test(e.API_PUBLIC_URL), { message: 'En producción API_PUBLIC_URL debe empezar con https://' })
   .refine((e) => e.NODE_ENV !== 'production' || (e.STORAGE_DRIVER === 'r2' && e.MAIL_DRIVER === 'smtp'), {

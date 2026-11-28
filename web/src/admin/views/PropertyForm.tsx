@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { apiActive, ZApi, type ApiFailure } from '../api';
+import { apiActive, errorText, ZApi, type ApiFailure } from '../api';
 import { isAdminSession } from '../auth';
+import { deleteDraft, draftKey, loadDraft, markSending, newToken, restoreDraft, saveDraft, type LoadedDraft } from '../draft';
 import { useOverlay } from '../components/Overlay';
 import { brokerOptions, Crumbs, err, FieldError, Icon, Options, PageHead, Photo, StatusBadge, useErrors, useUrlParams, type ExtraError } from '../components/ui';
 import { broker, cap, log, money, norm, prop, rerender, upcoming, useStore, Z, type Property } from '../store';
@@ -26,23 +27,45 @@ export function PropertyForm() {
   const editing = !!id;
   const src = id ? prop(id) : undefined;
   if (editing && !src) return <PropertyDetail />; // muestra «Propiedad no encontrada»
-  return <Form key={id || 'nueva'} src={src} />;
+  return <WithDraft key={id || 'nueva'} src={src} draftId={id || 'nueva'} />;
 }
 
-function Form({ src }: { src?: Property }) {
+/** Busca el borrador de este navegador antes de mostrar el formulario */
+function WithDraft({ src, draftId }: { src?: Property; draftId: string }) {
+  const [key] = useState(() => draftKey(draftId));
+  const [state, setState] = useState<{ draft: LoadedDraft | null; n: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    loadDraft(key).catch(() => null).then((draft) => alive && setState({ draft, n: 0 }));
+    return () => { alive = false; };
+  }, [key]);
+  if (!state) return <p className="muted" role="status">Buscando tu borrador…</p>;
+  return <Form key={state.n} src={src} storeKey={key} draft={state.draft} onDiscard={() => setState({ draft: null, n: state.n + 1 })} />;
+}
+
+/** Datos iniciales: los de la casa (o en blanco) con el borrador encima */
+function initial(src: Property | undefined, draft: LoadedDraft | null): Draft {
+  const base: Draft = src ? JSON.parse(JSON.stringify(src)) : EMPTY();
+  if (!draft) return base;
+  // Las fotos ya subidas usan su enlace vigente: el firmado que traía el borrador caduca
+  const photos = (draft.data.photos ?? []).map((p) => base.photos.find((x) => x.key && x.key === p.key) ?? p);
+  return { ...base, ...draft.data, photos };
+}
+
+function Form({ src, storeKey, draft, onDiscard }: { src?: Property; storeKey: string; draft: LoadedDraft | null; onDiscard: () => void }) {
   const D = useStore();
   const navigate = useNavigate();
-  const { toast } = useOverlay();
+  const { toast, confirm } = useOverlay();
   const { errors, check, live, clear, set: setErrors } = useErrors();
   const editing = !!src;
-  const [f, setF] = useState<Draft>(() => (src ? JSON.parse(JSON.stringify(src)) : EMPTY()));
+  const [f, setF] = useState<Draft>(() => initial(src, draft));
 
-  const [custom, setCustom] = useState(() => f.amenities.filter((a) => !Z.AMENITIES.includes(a)));
-  const [dirty, setDirty] = useState(false);
+  const [custom, setCustom] = useState(() => [...new Set([...(draft?.custom ?? []), ...f.amenities.filter((a) => !Z.AMENITIES.includes(a))])]);
+  const [dirty, setDirty] = useState(!!draft);
   const [invalidBar, setInvalidBar] = useState(false);
   const [formError, setFormError] = useState(false);
   const [newAmen, setNewAmen] = useState('');
-  const [mapsUrl, setMapsUrl] = useState('');
+  const [mapsUrl, setMapsUrl] = useState(draft?.mapsUrl ?? '');
   const [mapsMsg, setMapsMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [locating, setLocating] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -64,6 +87,72 @@ function Form({ src }: { src?: Property }) {
   });
 
   const update = (changes: Partial<Draft>) => { setF((x) => ({ ...x, ...changes })); setDirty(true); };
+
+  /* ---------- Borrador: se guarda en este navegador medio segundo después de cada cambio ---------- */
+  const [token] = useState(() => draft?.token ?? newToken());
+  const [draftState, setDraftState] = useState<{ at?: number; failed?: boolean }>({ at: draft?.savedAt });
+  const stopped = useRef(false); // ya se envió o se descartó
+  const pending = useRef<(() => Promise<void>) | null>(null);
+  const flush = () => { const run = pending.current; pending.current = null; return run ? run() : Promise.resolve(); };
+  const initialData = useRef({ f, custom, mapsUrl });
+  useEffect(() => {
+    const i = initialData.current;
+    if (stopped.current || !dirty || (i.f === f && i.custom === custom && i.mapsUrl === mapsUrl)) return;
+    pending.current = () => saveDraft(storeKey, token, { data: f, custom, mapsUrl }).then(
+      () => setDraftState({ at: Date.now() }),
+      (e) => { console.warn('Borrador: no se guardó', e); setDraftState({ failed: true }); },
+    );
+    const t = setTimeout(flush, 500);
+    return () => clearTimeout(t);
+  }, [f, custom, mapsUrl, dirty]);
+  useEffect(() => {
+    const onHide = () => { flush(); };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+      flush(); // cambió de sección o se cerró la sesión
+    };
+  }, []);
+  // El navegador pregunta antes de recargar o cerrar con cambios sin guardar
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { if (!stopped.current) { flush(); e.preventDefault(); } };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const discard = () => confirm({
+    title: '¿Descartar el borrador?', lead: 'Se borra lo que escribiste y las fotos que aún no se guardan en el servidor.',
+    cancel: 'Conservar', confirm: 'Descartar',
+    onConfirm: () => {
+      stopped.current = true;
+      pending.current = null;
+      deleteDraft(storeKey, token).catch(() => {}).then(onDiscard);
+    },
+  });
+  /** El borrador se borra solo cuando el servidor confirma; si falla, se conserva y se vuelve al formulario */
+  const send = async (p: Property, isNew: boolean, before: Property | null, okMsg: string) => {
+    stopped.current = true;
+    markSending(token);
+    const backup = flush();
+    const here = '#/propiedades/' + p.id;
+    navigate('/propiedades/' + p.id);
+    try {
+      const code = await ZApi.propertySave(p, isNew, before);
+      await backup;
+      await deleteDraft(storeKey, token).catch(() => {});
+      toast(okMsg);
+      if (isNew && location.hash === here) navigate('/propiedades/' + code);
+    } catch (e) {
+      const created = (e as ApiFailure).creada;
+      await backup;
+      await restoreDraft(storeKey, token, created ? draftKey(created) : undefined).catch(() => {});
+      toast((created ? `La casa se creó (${created}), pero faltó guardar algo: ` : 'No se guardó: ') + errorText(e) + ' Tu borrador se conserva.');
+      if (location.hash === here) navigate(isNew && !created ? '/propiedades/nueva' : `/propiedades/${created || p.id}/editar`);
+    }
+  };
   const complete = () =>
     [f.name, f.type, f.zone, f.city, f.address, f.desc, hasRooms(typeKey(f.type)) ? String(f.m2) : 'n/a', String(f.terreno), f.availableFrom, f.broker].every((v) => String(v ?? '').trim() !== '') && f.price > 0;
   const ok = complete();
@@ -154,25 +243,23 @@ function Form({ src }: { src?: Property }) {
       const before = { ...src };
       const prevBroker = src.broker;
       Object.assign(src, data);
-      if (apiActive()) ZApi.propertySave(src, false, before);
       if (src.visibility === 'publicada' && !src.published) src.published = TODAY();
       if (prevBroker !== src.broker) {
         upcoming((a) => a.property === src.id).forEach((a) => (a.broker = src.broker));
         log(`Lucía asignó ${src.name} a ${broker(src.broker).name}.`, src.id);
       }
       log(`Lucía actualizó la información de ${src.name}.`, src.id);
-      toast('Se guardaron los cambios de ' + src.name + '.');
+      toast('Guardando los cambios de ' + src.name + '…');
+      send(src, false, before, 'Se guardaron los cambios de ' + src.name + '.');
       rerender();
-      navigate('/propiedades/' + src.id);
     } else {
       const nid = 'ZUG-' + String(D.nextNumbers.property++).padStart(3, '0');
       const p: Property = { ...(data as Property), id: nid, published: f.visibility === 'publicada' ? TODAY() : '', updated: 'Hoy', updatedAt: Date.now() };
       D.properties.push(p);
-      if (apiActive()) ZApi.propertySave(p, true, null, (code) => navigate('/propiedades/' + code));
       log(`Lucía creó ${p.name} (${nid}) y la asignó a ${broker(p.broker).name}.`, nid);
-      toast(p.name + ' se creó' + (p.visibility === 'publicada' ? ' y ya está publicada.' : ' como ' + p.visibility + '.'));
+      toast('Guardando ' + p.name + '…');
+      send(p, true, null, p.name + ' se creó' + (p.visibility === 'publicada' ? ' y ya está publicada.' : ' como ' + p.visibility + '.'));
       rerender();
-      navigate('/propiedades/' + nid);
     }
   };
 
@@ -206,6 +293,17 @@ function Form({ src }: { src?: Property }) {
       ) : (
         <div className="notice notice--warn"><Icon id="file-edit" /><span>Nueva propiedad · <span id="notice-name">{f.name || 'Sin nombre'}</span>. Revisa los datos antes de crear y publicar el registro.</span></div>
       )}
+      {draft && (
+        <div className="notice notice--info" role="status">
+          <Icon id="info" />
+          <div>
+            <strong>Recuperamos tu borrador</strong>
+            Guardado el {new Date(draft.savedAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })} en este navegador. Todavía no está en el servidor.
+            {draft.lostPhotos > 0 && ` Fotos que no se pudieron recuperar: ${draft.lostPhotos}. Vuelve a elegirlas.`}
+            <div style={{ marginTop: '.5rem' }}><button className="btn btn--secondary" type="button" onClick={discard}>Descartar borrador</button></div>
+          </div>
+        </div>
+      )}
       {formError && (
         <div className="notice notice--error" id="form-errors" role="alert">
           <Icon id="alert" />
@@ -228,7 +326,7 @@ function Form({ src }: { src?: Property }) {
                   <label className="field__label" htmlFor="p-maps">Enlace de Google Maps</label>
                   <div className="locate-row">
                     <input className="input" id="p-maps" inputMode="url" autoComplete="off" placeholder="https://maps.app.goo.gl/…" aria-describedby="p-maps-hint" value={mapsUrl}
-                      aria-invalid={mapsMsg && !mapsMsg.ok ? true : undefined} onChange={(e) => setMapsUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); locate(); } }} />
+                      aria-invalid={mapsMsg && !mapsMsg.ok ? true : undefined} onChange={(e) => { setMapsUrl(e.target.value); setDirty(true); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); locate(); } }} />
                     <button className="btn btn--secondary" type="button" disabled={locating} onClick={locate}><Icon id="pin" />Ubicar</button>
                   </div>
                   <p className="field__hint" id="p-maps-hint" aria-live="polite">
@@ -384,7 +482,9 @@ function Form({ src }: { src?: Property }) {
                 <strong id="save-title">
                   {invalidBar ? 'Revisa los campos marcados' : editing ? (dirty ? (ok ? 'Cambios listos para guardar' : 'Completa los campos obligatorios') : 'Sin cambios por guardar') : ready ? 'Todo listo para crear la propiedad' : 'Completa los datos para crear la propiedad'}
                 </strong>
-                <p>* Campos obligatorios · Revisa la información antes de publicar.</p>
+                <p>* Campos obligatorios · {draftState.failed ? 'No se pudo guardar el borrador en este navegador: no recargues sin guardar.'
+                  : draftState.at ? `Borrador guardado en este navegador a las ${new Date(draftState.at).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })}.`
+                  : 'Revisa la información antes de publicar.'}</p>
               </div>
               <div className="page-actions">
                 <Link className="btn btn--secondary" to={editing ? '/propiedades/' + src!.id : '/propiedades'}>Cancelar</Link>

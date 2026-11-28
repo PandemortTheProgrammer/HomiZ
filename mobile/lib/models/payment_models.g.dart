@@ -1,5 +1,10 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'payment_models.dart';
 
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
 
 _PromissoryNote _$PromissoryNoteFromJson(Map<String, dynamic> json) =>
     _PromissoryNote(

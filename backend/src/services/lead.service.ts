@@ -9,6 +9,7 @@ import { nextFolio } from './codes.service.js';
 import { assertVisitable, placeVisit, VISIT_HOURS_TEXT, visitTimeOk } from './appointment.service.js';
 import { correctionToken } from './lead-correction.service.js';
 import { notify, plainBrokers } from './notification.service.js';
+import { ownerIds, ownerOnly } from './lead-window.service.js';
 
 export interface LeadInput {
   reason: Leads.LeadRow['reason'];
@@ -105,7 +106,8 @@ export async function createLead(l: LeadInput): Promise<{ folio: string; appoint
     }
     // Quien ya tiene broker sigue con él; si no, la toma el primero que la atienda
     const { rows: [own] } = clientId ? await db.query<{ broker_id: string | null }>('SELECT broker_id FROM clients WHERE id = $1', [clientId]) : { rows: [] as { broker_id: string | null }[] };
-    const brokerId = l.brokerId ?? own?.broker_id ?? null;
+    // Publicar u otro motivo: solo la dueña los atiende, sin broker
+    const brokerId = ownerOnly(l) ? null : l.brokerId ?? own?.broker_id ?? null;
     // Sin broker propio, una visita o una compra tiene la prioridad del asesor de la casa
     const houseBroker = !brokerId && (l.reason === 'visita' || l.reason === 'comprar') ? property?.broker_id ?? null : null;
     const leadId = await Leads.insert(db, {
@@ -136,7 +138,7 @@ export async function createLead(l: LeadInput): Promise<{ folio: string; appoint
 
     // Con broker le llega a él (si la registró él mismo, no hace falta); con prioridad, al asesor de la casa;
     // en el pool, primero a los brokers: administración entra después de su espera
-    const recipients = l.brokerId ? [] : brokerId ? [brokerId] : houseBroker ? [houseBroker] : await plainBrokers(db);
+    const recipients = ownerOnly(l) ? await ownerIds(db) : l.brokerId ? [] : brokerId ? [brokerId] : houseBroker ? [houseBroker] : await plainBrokers(db);
     await notify(recipients, {
       type: l.reason === 'visita' ? 'appointment_requested' : 'lead_received',
       title: l.reason === 'visita' ? 'Nueva solicitud de visita' : 'Nueva solicitud del sitio',

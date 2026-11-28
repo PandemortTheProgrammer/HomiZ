@@ -10,14 +10,14 @@ import { API_URL } from '../lib/api';
    - Con la pestaña cerrada, los avisos los muestra public/admin/firebase-messaging-sw.js.
    ========================================================================== */
 const CONFIG = {
-  apiKey: 'TU_API_KEY',
+  apiKey: 'AIzaSyBx7pt0_zgMJBrK0MoFiM91-7tOmRLtX1E',
   authDomain: 'homiz-413ff.firebaseapp.com',
   projectId: 'homiz-413ff',
   storageBucket: 'homiz-413ff.firebasestorage.app',
-  messagingSenderId: 'TU_SENDER_ID',
-  appId: 'TU_APP_ID',
+  messagingSenderId: '781670117568',
+  appId: '1:781670117568:web:ce01ba2a927343e7c57d25',
 };
-const VAPID_KEY = 'TU_LLAVE_VAPID';
+const VAPID_KEY = 'BEJw-k2x765RpmUta5eQpKFwF0Pfp5f8B7yRorKR792pTS0irlUE-dGdiGZj7sC9KDaZf3skbgCH8WpdhV25Elc';
 const TOKEN_KEY = 'zugar_push_token';
 
 export const pushSupported = () => window.isSecureContext && 'serviceWorker' in navigator && 'Notification' in window && 'PushManager' in window;

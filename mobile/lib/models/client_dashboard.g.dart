@@ -1,5 +1,10 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'client_dashboard.dart';
 
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
 
 _ClientDashboard _$ClientDashboardFromJson(
   Map<String, dynamic> json,

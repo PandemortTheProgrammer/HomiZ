@@ -1,4 +1,4 @@
-import { pool } from '../config/database.js';
+import { pool, type Db } from '../config/database.js';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { AppError } from '../middlewares/error-handler.js';
@@ -17,6 +17,21 @@ import { notify } from './notification.service.js';
  */
 
 const MINUTE = 60_000;
+
+/**
+ * Publicar una casa y «otro motivo» solo los atiende la dueña, por los mensajes de la solicitud:
+ * no se asignan a brokers ni llevan citas o casas propuestas. Los brokers y administración no las ven.
+ */
+export const OWNER_ONLY_REASONS = ['publicar', 'otro'] as const;
+export const ownerOnly = (l: { reason: string }): boolean => (OWNER_ONLY_REASONS as readonly string[]).includes(l.reason);
+
+/** Usuarios activos con el rol de dueña (owner). */
+export async function ownerIds(db: Db = pool): Promise<string[]> {
+  const { rows } = await db.query<{ id: string }>(
+    `SELECT u.id FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id WHERE r.code = 'owner' AND u.active`,
+  );
+  return rows.map((r) => r.id);
+}
 
 export interface LeadWindow {
   priority: { brokerId: string; brokerName: string; until: Date } | null;
@@ -62,24 +77,25 @@ export function assertMayAct(user: AuthUser, l: LeadRow, now = new Date()): void
 /** Aviso único a la dueña por cada solicitud sin atender. Corre cuando alguien consulta solicitudes o el inicio. */
 export async function warnOwnerOfUnattended(): Promise<void> {
   try {
-    const { rows } = await pool.query<{ id: string; folio: string; name: string }>(
-      `SELECT l.id, l.folio, l.name FROM leads l
-        WHERE l.broker_id IS NULL AND l.status <> 'cerrado' AND l.created_at <= now() - make_interval(mins => $1::int)
+    // Las de la dueña (publicar u otro) no se asignan: cuentan como sin atender mientras nadie les conteste
+    const { rows } = await pool.query<{ id: string; folio: string; name: string; reason: string }>(
+      `SELECT l.id, l.folio, l.name, l.reason FROM leads l
+        WHERE l.status <> 'cerrado' AND l.created_at <= now() - make_interval(mins => $1::int)
+          AND ((l.reason IN ('publicar', 'otro') AND l.status = 'nuevo') OR (l.reason NOT IN ('publicar', 'otro') AND l.broker_id IS NULL))
           AND NOT EXISTS (SELECT 1 FROM reminder_log r WHERE r.kind = 'lead_unattended' AND r.entity_id = l.id)
         ORDER BY l.created_at LIMIT 20`,
       [env.LEAD_ESCALATE_MINUTES],
     );
     if (!rows.length) return;
-    const { rows: owners } = await pool.query<{ id: string }>(
-      `SELECT u.id FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id WHERE r.code = 'owner' AND u.active`,
-    );
+    const owners = await ownerIds();
     for (const l of rows) {
       const { rowCount } = await pool.query(
         `INSERT INTO reminder_log (kind, entity_id, sent_on) VALUES ('lead_unattended', $1, CURRENT_DATE) ON CONFLICT DO NOTHING`,
         [l.id],
       );
       if (rowCount) {
-        await notify(owners.map((o) => o.id), { type: 'lead_unattended', title: 'Solicitud sin atender', message: `${l.name} · folio ${l.folio}. Nadie la ha tomado; asígnala a un broker.`, entity: 'lead', entityId: l.id });
+        const next = ownerOnly(l) ? 'Aún no le contestas; escríbele en la solicitud.' : 'Nadie la ha tomado; asígnala a un broker.';
+        await notify(owners, { type: 'lead_unattended', title: 'Solicitud sin atender', message: `${l.name} · folio ${l.folio}. ${next}`, entity: 'lead', entityId: l.id });
       }
     }
   } catch (err) {

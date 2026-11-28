@@ -14,6 +14,9 @@ import { NeedsServer, useApiData } from './Payments';
    el cliente lo ve en la app, en «Mis solicitudes», y recibe un aviso.
    ========================================================================== */
 const REASON: Record<Lead['reason'], string> = { visita: 'Visita', rentar: 'Quiere rentar', comprar: 'Quiere comprar', publicar: 'Publicar su casa', otro: 'Otro motivo' };
+
+/** Publicar su casa u otro motivo: solo el dueño las ve y las atiende, por mensajes (sin broker, citas ni casas propuestas). */
+const ownerOnly = (l: Pick<Lead, 'reason'>) => l.reason === 'publicar' || l.reason === 'otro';
 const TONE: Record<Lead['status'], string> = { nuevo: 'warn', en_seguimiento: 'info', cerrado: 'gris' };
 const TABS: [string, string][] = [['nuevo', 'Nuevas'], ['en_seguimiento', 'En seguimiento'], ['cerrado', 'Cerradas'], ['', 'Todas']];
 /** Administración ve además las que aún no tienen broker (las asigna ella) */
@@ -358,7 +361,7 @@ function Detail({ id, onChanged, onDeleted, onOpen }: { id: string; onChanged: (
           </div>
           <p className="small muted" style={{ marginBottom: '.75rem' }}>{REASON[l.reason]} · {dateFull(l.createdAt.slice(0, 10))}{origin}</p>
           <div className="choice-row" style={{ marginBottom: '1rem' }}>
-            <button className="btn btn--sm" type="button" disabled={busy} onClick={schedule}><Icon id="cal-clock" />{activeAppt(l) ? 'Cambiar fecha de la cita' : 'Agendar cita'}</button>
+            {!ownerOnly(l) && <button className="btn btn--sm" type="button" disabled={busy} onClick={schedule}><Icon id="cal-clock" />{activeAppt(l) ? 'Cambiar fecha de la cita' : 'Agendar cita'}</button>}
             <button className="btn btn--sm btn--secondary" type="button" disabled={busy} onClick={edit}>Editar datos</button>
             {isAdminSession() && <button className="btn btn--sm btn--secondary link--danger" type="button" disabled={busy} onClick={remove}>Eliminar</button>}
           </div>
@@ -381,6 +384,7 @@ function Detail({ id, onChanged, onDeleted, onOpen }: { id: string; onChanged: (
           </section>
         )}
 
+        {!ownerOnly(l) && (<>
         <section className="card card--pad" aria-labelledby="rq-appts">
           <div className="card__head">
             <h2 className="card__title" id="rq-appts">Citas · {appts.length}</h2>
@@ -414,9 +418,17 @@ function Detail({ id, onChanged, onDeleted, onOpen }: { id: string; onChanged: (
             </ul>
           ) : <p className="muted">Aún no hay casas propuestas. Los brokers las proponen desde la app, en esta misma solicitud.</p>}
         </section>
+        </>)}
       </div>
 
       <div className="stack">
+        {ownerOnly(l) ? (
+          <section className={'card card--pad' + (l.status === 'nuevo' ? ' card--alert' : '')} aria-labelledby="rq-broker">
+            <h2 className="card__title" id="rq-broker" style={{ marginBottom: '.75rem' }}>La atiende el dueño</h2>
+            {l.overdue && l.status === 'nuevo' && <p style={{ marginBottom: '.5rem' }}><Badge label="Sin contestar" tone="err" /></p>}
+            <p className="small">Solo tú (el dueño) ves esta solicitud. Contéstale en «Conversación con el cliente»: le llega a la app. No lleva broker, cita ni casas propuestas.</p>
+          </section>
+        ) : (
         <section className={'card card--pad' + (l.broker ? '' : ' card--alert')} aria-labelledby="rq-broker">
           <h2 className="card__title" id="rq-broker" style={{ marginBottom: '.75rem' }}>Broker asignado</h2>
           {l.priority && <p className="small" style={{ marginBottom: '.5rem' }}>{priorityLabel(l)}</p>}
@@ -434,10 +446,11 @@ function Detail({ id, onChanged, onDeleted, onOpen }: { id: string; onChanged: (
             </>
           ) : <p>{l.broker?.name ?? 'Sin asignar'}</p>}
         </section>
+        )}
         <section className="card card--pad" aria-labelledby="rq-contact">
           <h2 className="card__title" id="rq-contact" style={{ marginBottom: '.75rem' }}>Contacto</h2>
           <div className="contact-lines"><a href={'mailto:' + l.email}>{l.email}</a>{l.phone && <a href={'tel:' + l.phone.replace(/\s/g, '')}>{l.phone}</a>}</div>
-          <p className="small muted" style={{ marginTop: '.75rem' }}>La respuesta y las casas propuestas le llegan a la app Homiz, en «Mis solicitudes», si tiene cuenta con este correo.</p>
+          <p className="small muted" style={{ marginTop: '.75rem' }}>{ownerOnly(l) ? 'Tus mensajes' : 'La respuesta y las casas propuestas'} le llegan a la app Homiz, en «Mis solicitudes», si tiene cuenta con este correo.</p>
         </section>
         <section className="card card--pad" aria-labelledby="rq-answer">
           <h2 className="card__title" id="rq-answer" style={{ marginBottom: '.75rem' }}>Conversación con el cliente</h2>
@@ -501,7 +514,7 @@ export function RequestsPage() {
                         <td>{REASON[l.reason]}</td>
                         <td className="small">{l.property ? l.property.name : [budgetOf(l.payload), l.payload.recamaras && `${l.payload.recamaras} rec.`, l.payload.zona || l.payload.inmueble_zona].filter(Boolean).join(' · ') || '—'}</td>
                         <td>{dateShort(l.createdAt.slice(0, 10))}</td>
-                        <td><ReasonBadge l={l} />{l.broker ? <span className="sub">{l.broker.name}</span> : l.priority ? <span className="sub">{priorityLabel(l)}</span> : <span className="sub"><Badge label="Sin asignar" tone="error" /></span>}</td>
+                        <td><ReasonBadge l={l} />{ownerOnly(l) ? <span className="sub">Solo el dueño</span> : l.broker ? <span className="sub">{l.broker.name}</span> : l.priority ? <span className="sub">{priorityLabel(l)}</span> : <span className="sub"><Badge label="Sin asignar" tone="error" /></span>}</td>
                         <td className="small">{[l.appointmentCount && `${l.appointmentCount} ${plural(l.appointmentCount, 'cita', 'citas')}`, l.proposalCount && `${l.proposalCount} ${plural(l.proposalCount, 'casa propuesta', 'casas propuestas')}`, !l.appointmentCount && !l.proposalCount && l.response && 'Respondida'].filter(Boolean).join(' · ') || '—'}</td>
                         <td><button className="btn btn--sm btn--secondary" type="button" onClick={() => choose(l.id)}>{l.id === selected ? 'Abierta' : 'Atender'}</button></td>
                       </tr>
